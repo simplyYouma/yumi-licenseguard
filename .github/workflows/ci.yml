@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────
+  # TypeScript: type-check the React + hooks + screens that consumers import.
+  # No build step — consumers (Tauri/Vite apps) compile from source.
+  # ────────────────────────────────────────────────────────────────────────
+  typescript:
+    name: TypeScript (tsc --noEmit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Type-check
+        run: npm run typecheck
+
+  # ────────────────────────────────────────────────────────────────────────
+  # Rust: cargo check on the shared yumi-licenseguard crate.
+  # Standalone build — proves the crate compiles outside any host app.
+  # ────────────────────────────────────────────────────────────────────────
+  rust:
+    name: Rust (cargo check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tauri/target
+          key: ${{ runner.os }}-cargo-licenseguard-${{ hashFiles('tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-licenseguard-
+
+      - name: Install Linux Tauri build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+
+      - name: cargo check
+        working-directory: tauri
+        run: cargo check
