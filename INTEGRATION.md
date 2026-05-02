@@ -10,213 +10,210 @@ Use this document when you create a new POS project, or when you migrate an exis
 
 ```
 ┌──────────────────────────────┐
-│  Yumi Hub  (Cloudflare Worker + D1)
-│  - Issues Ed25519 license sigs
+│  Yumi Hub (Cloudflare Worker + D1)
+│  - Issues Ed25519 license signatures
 │  - Holds revocation state
-│  - Serves /api/verify (HTTP)
+│  - Serves /api/verify (HTTPS)
+│  Lives at: github.com/simplyYouma/yumi-hub-cf  (private)
 └──────────┬───────────────────┘
            │ HTTPS every 20 min + on-demand
 ┌──────────▼───────────────────┐
 │  Client POS app (Tauri + React)
 │  ┌─────────────────────────┐  │
 │  │  @yumi/licenseguard     │  │  ← single source of truth
-│  │  (TS screens + hooks)   │  │     for license + HWID + crypto
-│  │  (Rust crate: cipher,   │  │
-│  │   clock, hwid, storage) │  │
+│  │  github.com/simplyYouma/│  │     for license + HWID + crypto
+│  │  yumi-licenseguard      │  │  (public repo, consumed via tag)
+│  │  TS screens + Rust crate│  │
 │  └─────────────────────────┘  │
 │  ┌─────────────────────────┐  │
 │  │  Project-specific code  │  │  ← only this part is unique
-│  │  (DB, business logic)   │  │
+│  │  (DB, business logic)   │  │     per POS app
 │  └─────────────────────────┘  │
 └──────────────────────────────┘
 ```
 
-**Golden rule**: never duplicate license / HWID / crypto / secure-storage logic into the project. If you find yourself writing such code in a client project, stop — extend `yumi-licenseguard` instead.
+**Golden rule**: never duplicate license / HWID / crypto / secure-storage logic into a POS project. If you find yourself writing such code, stop — extend `yumi-licenseguard` instead.
 
 ---
 
 ## 1. Required project skeleton
 
-A conformant project has this shape (the parts that matter for licensing):
+A conformant Tauri POS project has this shape:
 
 ```
 my-pos/
-├── package.json                    # has @yumi/licenseguard dep
-├── .env                            # VITE_YUMI_PROJECT_ID, VITE_YUMI_HUB_URL, VITE_ACCENT_COLOR…
+├── package.json                # depends on "@yumi/licenseguard"
+├── .env / .env.example         # VITE_YUMI_PROJECT_ID, VITE_YUMI_HUB_URL, VITE_ACCENT_COLOR…
+├── vite.config.ts              # base: './', resolve.dedupe: ['react', 'react-dom']
 ├── src/
-│   ├── App.tsx                     # imports LicenseGuard from @yumi/licenseguard
-│   └── yumi.config.ts              # per-project config (productId, productName, branding)
+│   ├── App.tsx                 # imports LicenseGuard from "@yumi/licenseguard"
+│   ├── components/             # UI only — no licensing code
+│   ├── services/               # data access; one module per domain
+│   ├── hooks/                  # state primitives
+│   └── lib/                    # pure utils (no I/O)
 └── src-tauri/
-    ├── Cargo.toml                  # path-deps yumi-licenseguard
-    └── src/lib.rs                  # registers yumi commands + project commands
+    ├── Cargo.toml              # git dep "yumi-licenseguard"; no ed25519/hex direct deps
+    ├── build.rs                # fn main() { tauri_build::build() }
+    └── src/lib.rs              # registers yumi commands + project-specific commands only
 ```
 
 ---
 
-## 2. Wiring — five mechanical edits
+## 2. Add the package — exactly five mechanical edits
 
-### 2.1 `package.json`
+### Edit 1 — `package.json`
 
-Add the dependency:
+Add the npm dependency, pinned to a tag of `yumi-licenseguard`:
 
-```jsonc
+```json
 {
   "dependencies": {
-    "@yumi/licenseguard": "*"
-    // …other deps
+    "@yumi/licenseguard": "github:simplyYouma/yumi-licenseguard#v1.0.0"
   }
 }
 ```
 
-The repo uses **npm workspaces** (root `YUMI-PROJECT/package.json`). The `*`
-specifier resolves automatically to the local workspace at
-`Yumi-Hub-CF/packages/licenseguard/ts`. After editing, run `npm install` from
-the **monorepo root** (not the project subfolder).
+**Why a tag?** The tag locks the resolution to a specific commit. Bug fixes and security upgrades bump the tag; consumers opt in by editing this line.
 
-### 2.2 `src-tauri/Cargo.toml`
+### Edit 2 — `src-tauri/Cargo.toml`
 
-Add the crate:
+Add the Rust crate, also pinned to the same tag:
 
 ```toml
 [dependencies]
-yumi-licenseguard = { path = "../../Yumi-Hub-CF/packages/licenseguard/tauri" }
-# remove: ed25519-dalek, hex (now provided by the crate)
+# ... your other deps ...
+yumi-licenseguard = { git = "https://github.com/simplyYouma/yumi-licenseguard.git", tag = "v1.0.0" }
 ```
 
-### 2.3 `src-tauri/src/lib.rs`
+**Do not** also depend on `ed25519-dalek` or `hex` directly. The crate handles all crypto.
 
-Register the six Tauri commands the package exposes:
+### Edit 3 — `src-tauri/src/lib.rs`
+
+Register the six shared Tauri commands inside `tauri::generate_handler!`:
 
 ```rust
-.invoke_handler(tauri::generate_handler![
-    // Yumi LicenseGuard (shared crate)
-    yumi_licenseguard::commands::get_machine_id,
-    yumi_licenseguard::commands::verify_license,
-    yumi_licenseguard::commands::get_license_key,
-    yumi_licenseguard::commands::save_license_key,
-    yumi_licenseguard::commands::get_secure_storage,
-    yumi_licenseguard::commands::set_secure_storage,
-    yumi_licenseguard::commands::clock_check,
-    // …project-specific commands
-])
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        // ... your plugins ...
+        .invoke_handler(tauri::generate_handler![
+            // Shared LicenseGuard (yumi_licenseguard crate)
+            yumi_licenseguard::commands::get_machine_id,
+            yumi_licenseguard::commands::verify_license,
+            yumi_licenseguard::commands::get_license_key,
+            yumi_licenseguard::commands::save_license_key,
+            yumi_licenseguard::commands::get_secure_storage,
+            yumi_licenseguard::commands::set_secure_storage,
+            // Your project-specific commands below
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
 ```
 
-**Delete** any local copies of `get_machine_id`, `verify_license`, `get_license_key`, `save_license_key`, `get_secure_storage`, `set_secure_storage` from the project's `lib.rs`. They live in the crate now.
+The `commands::` submodule prefix matters — Rust requires `#[tauri::command]` items to live in a module when the crate is consumed as a library.
 
-### 2.4 `src/App.tsx`
+### Edit 4 — `src/App.tsx`
 
-Replace the local import:
-
-```diff
-- import { LicenseGuard } from '@/components/Guard/LicenseGuard/index';
-+ import { LicenseGuard } from '@yumi/licenseguard';
-```
-
-Wrap your root tree exactly as before:
+Wrap the root tree:
 
 ```tsx
-<LicenseGuard>
-  <App />
-</LicenseGuard>
+import { LicenseGuard } from '@yumi/licenseguard';
+
+export default function App() {
+    return (
+        <LicenseGuard>
+            <YourActualApp />
+        </LicenseGuard>
+    );
+}
 ```
 
-### 2.5 Delete the duplicate folder
+The `<LicenseGuard>` orchestrator handles all blocking screens (activation / banned / expired / clock-fraud / sync-required) and only renders children once the license is valid.
 
-```bash
-rm -rf src/components/Guard/LicenseGuard
+### Edit 5 — `.env` (and `.env.example`)
+
+Set the project-specific identity:
+
+```dotenv
+# Required
+VITE_YUMI_PROJECT_ID=<UUID issued by the Hub admin>
+VITE_YUMI_HUB_URL=https://yumi-hub.fysokona.workers.dev/api/verify
+
+# Optional (white-label theming — defaults inside the package)
+VITE_PROJECT_NAME=My POS
+VITE_ACCENT_COLOR=#7A9080
+VITE_FONT_SERIF="Baskervville", serif
+VITE_FONT_SANS="Outfit", sans-serif
 ```
 
-That's it. Five edits, no exceptions.
+Commit `.env.example`. **Never commit** the real `.env` (add it to `.gitignore`).
 
 ---
 
-## 3. Environment variables (`.env`)
+## 3. Mandatory `vite.config.ts` flags
 
-The TS surface reads these at build time via `import.meta.env`:
+Two settings are required for Tauri production builds:
 
-| Variable | Required | Purpose |
-|---|---|---|
-| `VITE_YUMI_PROJECT_ID` | yes | UUID identifying this product to the Hub |
-| `VITE_YUMI_HUB_URL` | yes | Full `/api/verify` URL, e.g. `https://hub.yumi.app/api/verify` |
-| `VITE_ACCENT_COLOR` | optional | White-label theme accent |
-| `VITE_FONT_SANS` | optional | White-label font family |
+```ts
+export default defineConfig({
+    // ...
+    base: './',                                // assets resolve relative to tauri://localhost
+    resolve: { dedupe: ['react', 'react-dom'] }, // prevents double React inside the package
+});
+```
 
-A `.env.example` MUST ship with every project — never commit a real `.env`.
+Without `base: './'` → white screen in the bundled app.
+Without `dedupe` → runtime `Cannot read properties of null (reading 'useState')`.
 
----
+## 4. Mandatory `tauri.conf.json` CSP
 
-## 4. License key format (what the Hub issues)
+Tauri 2 IPC commands (like the SQL plugin) need an explicit CSP allowance:
 
-Two formats are supported by `verify_license`:
+```jsonc
+{
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://yumi-hub.fysokona.workers.dev"
+    }
+  }
+}
+```
 
-| Format | Message signed | Notes |
-|---|---|---|
-| **v2.5** (preferred) | `productId\|HWID\|expiry_ms` | Binds the key to a specific product *and* machine *and* expiry |
-| **v1 legacy** | `HWID\|expiry_ms` | Older keys, still accepted for backward compatibility |
-
-The signature is Ed25519, hex-encoded. The full key delivered to the customer is `expiryHex.signatureHex` (the dot is the separator). The TS layer parses it; you do not need to.
-
----
-
-## 5. Behavioural contract (what `LicenseGuard` does at boot)
-
-In order:
-
-1. **HWID** — `get_machine_id` returns a stable hardware fingerprint (WMIC UUID → MachineGuid → reg fallback → `/etc/machine-id`).
-2. **Saved license** — read from encrypted local storage via `get_license_key`. Empty → render `ActivationScreen`.
-3. **Clock fraud** — `clock_check` (Rust-authoritative, monotonic high-water). Fail → `ClockFraudScreen`.
-4. **Sync window** — if last hub sync > `syncLockMins` → `SyncRequiredScreen` (user must hit "Sync Now").
-5. **Local crypto verify** — `verify_license`, dual-path (v2.5 then v1 legacy fallback). Fail → unlicensed.
-6. **Hub verification** — POST `/api/verify` with `{ hwid, project_id }`. Source of truth for revocation, expiry, and notifications. Failure here is non-fatal (offline grace).
-7. **Periodic resync** — every 20 minutes thereafter.
-
-Screens are picked automatically based on state — your code should never decide which screen to show.
+Without `ipc: http://ipc.localhost` in `connect-src` → all IPC calls blocked → app fails to load.
 
 ---
 
-## 6. Project-specific Rust commands
+## 5. Upgrade workflow (when the package gets a new release)
 
-Keep these in your project's `src-tauri/src/lib.rs`. They are **not** licensing concerns:
+1. New tag is published, e.g. `v1.1.0`.
+2. In your POS project, edit `package.json` → bump `#v1.0.0` to `#v1.1.0`.
+3. Edit `src-tauri/Cargo.toml` → bump `tag = "v1.0.0"` to `tag = "v1.1.0"`.
+4. `npm install && cd src-tauri && cargo update -p yumi-licenseguard`.
+5. Build, smoke-test, ship.
 
-- Database backup / migrations / queries
-- Password hashing (`bcrypt`)
-- UUID generation
-- Printer / scanner / hardware integrations specific to your domain
-
-If you find yourself writing one of these in more than two projects, propose extracting it into a future `@yumi/common` crate — but **do not** add it to `@yumi/licenseguard`.
-
----
-
-## 7. Updating the package itself
-
-When you discover a bug in the license flow, fix it inside `Yumi-Hub-CF/packages/licenseguard/`:
-
-1. Make the change in `ts/src/` and/or `tauri/src/`
-2. Bump version in BOTH `ts/package.json` and `tauri/Cargo.toml` (keep them aligned)
-3. Add a new entry to `CHANGELOG.md` with the date + phase number + what changed
-4. Run `npm install` and `cargo check` from any consumer project to validate
-
-All consuming projects will pick up the change at their next `npm install` / `cargo build`.
+**You upgrade when you want.** No forced cascade. Old POS apps on `v1.0.0` keep working.
 
 ---
 
-## 8. Troubleshooting
+## 6. Conformance checklist
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `Cannot find module '@yumi/licenseguard'` | `npm install` not run after adding the dep | run `npm install` in the project |
-| `Cannot find module 'react'` typechecking the package | Package devDeps missing | run `npm install` inside `Yumi-Hub-CF/packages/licenseguard/ts/` |
-| `cargo check` errors about `ed25519-dalek` | Old direct dep in project Cargo.toml | remove `ed25519-dalek` and `hex` lines — they come transitively |
-| App boots but shows ActivationScreen even with valid `.license` | Storage encryption / HWID changed | check `.yumi.salt` + HWID match the original install |
-| Hub returns 500 | Hub-side issue (Supabase, schema) | not a client problem — investigate in `Yumi-Hub` repo |
-| ClockFraud screen on first boot of a fresh install | `clock_check` saw no prior timestamp and rolled forward — this is OK | only an issue if it persists after a restart |
+Tick each box before merging:
+
+- [ ] `@yumi/licenseguard` in `package.json` dependencies (with explicit `#vX.Y.Z` tag).
+- [ ] `yumi-licenseguard` git dep in `Cargo.toml` (with explicit `tag = "vX.Y.Z"`); **no** `ed25519-dalek` or `hex` direct deps.
+- [ ] No `src/components/Guard/LicenseGuard/` folder (the local copy must be deleted post-migration).
+- [ ] `src/App.tsx` imports `LicenseGuard` from `@yumi/licenseguard` — never from a relative path.
+- [ ] `lib.rs` registers all six yumi commands (paths under `yumi_licenseguard::commands::*`).
+- [ ] `.env.example` is committed; real `.env` is `.gitignore`d.
+- [ ] No hardcoded brand colors or strings in components.
+- [ ] `vite.config.ts` sets `base: './'` and `resolve.dedupe: ['react', 'react-dom']`.
+- [ ] `tauri.conf.json` `security.csp` `connect-src` includes `ipc: http://ipc.localhost`.
+- [ ] `package-lock.json` is committed (CI requires it).
+- [ ] `package.json` version and `tauri.conf.json` version are aligned before every release build.
+
+If any box is unchecked, it is **not** conformant. Fix before merging.
 
 ---
 
-## 9. Vibe-coding shortcut
-
-When asking an AI to scaffold a new POS, paste this prompt:
-
-> Create a new Tauri+React POS project named `<NAME>` based on `Yumi-Client-Project-Template`. Wire it to consume `@yumi/licenseguard` per `Yumi-Hub-CF/packages/licenseguard/INTEGRATION.md`. Set `VITE_YUMI_PROJECT_ID=<UUID>` and `VITE_YUMI_HUB_URL=https://hub.yumi.app/api/verify` in `.env`. Do not duplicate any license code into the new project. Verify with `npm run build` and `cargo check`.
-
-The AI agent reads this file, follows §2, and you get a conformant project.
+*Yumi — 2026 Edition*
