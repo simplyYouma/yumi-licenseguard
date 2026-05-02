@@ -1,0 +1,38 @@
+{
+  "name": "@yumi/licenseguard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared LicenseGuard React component — single source of truth for the activation/expiry/sync UI across all Yumi POS apps. Consumed via TypeScript source by Vite/Tauri client projects.",
+  "type": "module",
+  "main": "src/index.tsx",
+  "types": "src/index.tsx",
+  "exports": {
+    ".": {
+      "types": "./src/index.tsx",
+      "default": "./src/index.tsx"
+    },
+    "./theme": {
+      "types": "./src/theme.ts",
+      "default": "./src/theme.ts"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "default": "./src/types.ts"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@tauri-apps/api": "^2.10.0",
+    "lucide-react": ">=0.400.0",
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Rust build output
+target/
+**/target/
+
+# Build outputs
+dist/
+build/
+
+# Logs / OS
+*.log
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Agent / IDE harness — local only
+.agent/
+.claude/

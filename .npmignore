@@ -1,0 +1,12 @@
+# When this package is installed via `npm install github:simplyYouma/yumi-licenseguard`,
+# only the TypeScript side is needed. Strip the Rust crate, lockfile, docs,
+# and any other ballast from the resolved npm package.
+
+tauri/
+target/
+**/target/
+INTEGRATION.md
+.github/
+.agent/
+.claude/
+*.log

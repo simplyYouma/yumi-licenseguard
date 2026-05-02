@@ -1,0 +1,17 @@
+[package]
+name         = "yumi-licenseguard"
+version      = "1.0.0"
+edition      = "2024"
+rust-version = "1.85"
+description  = "Shared LicenseGuard backend for Yumi POS Tauri apps — HWID, Ed25519 verification, and tamper-resistant secure storage."
+
+[lib]
+name       = "yumi_licenseguard"
+path       = "src/lib.rs"
+crate-type = ["lib"]
+
+[dependencies]
+tauri          = { version = "2.10.3" }
+ed25519-dalek  = { version = "2.1.1", features = ["serde"] }
+hex            = "0.4.3"
+serde          = { version = "1.0", features = ["derive"] }
