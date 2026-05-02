@@ -1,0 +1,348 @@
+/*
+ * Yumi LicenseGuard — Component classes
+ * All styles live here. No inline `style={{}}` in screens.
+ * All values reference tokens from ./tokens.css.
+ *
+ * Naming: every class is prefixed `lg-` to avoid collisions with the
+ * consumer app's own styles. State theming is applied by setting one of
+ * `lg-state-{activate,expired,banned,clock,sync}` on the root element.
+ */
+
+/* ─────────────────────────────────────────────────────────────
+ * STATE THEMES — one variable swap maps to all themed accents.
+ * Apply these classes on the page wrapper.
+ * ───────────────────────────────────────────────────────────── */
+.lg-state-activate {
+  --lg-state:        var(--lg-activate);
+  --lg-state-soft:   var(--lg-activate-soft);
+  --lg-state-strong: var(--lg-activate-strong);
+  --lg-state-shadow: var(--lg-activate-shadow);
+  --lg-grid-line:    rgba(228, 123, 42, 0.10);
+}
+.lg-state-expired {
+  --lg-state:        var(--lg-expired);
+  --lg-state-soft:   var(--lg-expired-soft);
+  --lg-state-strong: var(--lg-expired-strong);
+  --lg-state-shadow: var(--lg-expired-shadow);
+  --lg-grid-line:    rgba(217, 119, 6, 0.10);
+}
+.lg-state-banned {
+  --lg-state:        var(--lg-banned);
+  --lg-state-soft:   var(--lg-banned-soft);
+  --lg-state-strong: var(--lg-banned-strong);
+  --lg-state-shadow: var(--lg-banned-shadow);
+  --lg-grid-line:    rgba(178, 31, 31, 0.10);
+}
+.lg-state-clock {
+  --lg-state:        var(--lg-clock);
+  --lg-state-soft:   var(--lg-clock-soft);
+  --lg-state-strong: var(--lg-clock-strong);
+  --lg-state-shadow: var(--lg-clock-shadow);
+  --lg-grid-line:    rgba(178, 31, 31, 0.10);
+}
+.lg-state-sync {
+  --lg-state:        var(--lg-sync);
+  --lg-state-soft:   var(--lg-sync-soft);
+  --lg-state-strong: var(--lg-sync-strong);
+  --lg-state-shadow: var(--lg-sync-shadow);
+  --lg-grid-line:    rgba(31, 108, 177, 0.10);
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * PAGE — full-viewport container, centered card
+ * ───────────────────────────────────────────────────────────── */
+.lg-page {
+  position: fixed;
+  inset: 0;
+  z-index: var(--lg-z-overlay);
+  background: var(--lg-bg);
+  color: var(--lg-text);
+  font-family: var(--lg-font-sans);
+  display: grid;
+  place-items: center;
+  padding: var(--lg-space-4);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * CARD — main container
+ * ───────────────────────────────────────────────────────────── */
+.lg-card {
+  width: 100%;
+  max-width: var(--lg-card-max-width);
+  background: var(--lg-surface);
+  border: 1px solid var(--lg-border);
+  border-radius: var(--lg-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--lg-shadow-md);
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * HERO — colored top section with grid + Yumi shield icon
+ * ───────────────────────────────────────────────────────────── */
+.lg-hero {
+  position: relative;
+  height: var(--lg-hero-height);
+  display: grid;
+  place-items: center;
+  background-color: var(--lg-state-soft);
+  background-image:
+    linear-gradient(var(--lg-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--lg-grid-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: center;
+  border-bottom: 1px solid var(--lg-border);
+}
+.lg-hero::before {
+  /* radial fade so the grid recedes at the edges */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 0%, var(--lg-state-soft) 75%);
+  pointer-events: none;
+}
+.lg-hero-icon {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: var(--lg-radius-icon);
+  background: var(--lg-state);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow:
+    0 8px 24px var(--lg-state-shadow),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.06);
+}
+.lg-hero-icon svg {
+  width: 40px;
+  height: 40px;
+  stroke-width: 2;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * BODY — text + form area below the hero
+ * ───────────────────────────────────────────────────────────── */
+.lg-body {
+  padding: var(--lg-space-5) var(--lg-space-6) var(--lg-space-6);
+}
+
+.lg-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lg-state);
+  margin: 0 0 var(--lg-space-2) 0;
+}
+
+.lg-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--lg-text);
+  line-height: 1.3;
+  margin: 0 0 var(--lg-space-2) 0;
+  letter-spacing: -0.01em;
+}
+
+.lg-description {
+  font-size: 13.5px;
+  color: var(--lg-text-muted);
+  line-height: 1.55;
+  margin: 0 0 var(--lg-space-5) 0;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * FORM PRIMITIVES — fields, labels, inputs, hwid block, button
+ * ───────────────────────────────────────────────────────────── */
+.lg-field {
+  margin-bottom: var(--lg-space-4);
+}
+.lg-field-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--lg-text-muted);
+  margin-bottom: var(--lg-space-2);
+}
+
+.lg-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 var(--lg-space-3);
+  font-size: 13px;
+  font-family: var(--lg-font-mono);
+  color: var(--lg-text);
+  background: var(--lg-surface);
+  border: 1px solid var(--lg-border);
+  border-radius: var(--lg-radius-sm);
+  transition:
+    border-color var(--lg-duration-fast) var(--lg-ease-out),
+    box-shadow var(--lg-duration-fast) var(--lg-ease-out);
+  outline: none;
+}
+.lg-input::placeholder {
+  color: var(--lg-text-subtle);
+  font-family: var(--lg-font-sans);
+}
+.lg-input:focus {
+  border-color: var(--lg-state);
+  box-shadow: 0 0 0 3px var(--lg-state-soft);
+}
+
+.lg-hwid {
+  display: flex;
+  align-items: center;
+  gap: var(--lg-space-2);
+  width: 100%;
+  padding: var(--lg-space-2) var(--lg-space-3);
+  background: var(--lg-surface-soft);
+  border: 1px solid var(--lg-border);
+  border-radius: var(--lg-radius-sm);
+  cursor: pointer;
+  transition: background var(--lg-duration-fast) var(--lg-ease-out);
+  font-family: inherit;
+}
+.lg-hwid:hover {
+  background: var(--lg-border);
+}
+.lg-hwid-value {
+  font-family: var(--lg-font-mono);
+  font-size: 12px;
+  color: var(--lg-text);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.lg-hwid-icon {
+  color: var(--lg-text-subtle);
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+.lg-hwid-icon--copied {
+  color: var(--lg-state);
+}
+
+.lg-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lg-space-2);
+  width: 100%;
+  height: 40px;
+  padding: 0 var(--lg-space-4);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  color: #fff;
+  background: var(--lg-state);
+  border: 1px solid var(--lg-state);
+  border-radius: var(--lg-radius-sm);
+  cursor: pointer;
+  transition: background var(--lg-duration-fast) var(--lg-ease-out);
+}
+.lg-button:hover:not(:disabled) {
+  background: var(--lg-state-strong);
+  border-color: var(--lg-state-strong);
+}
+.lg-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lg-button svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * ALERT — inline error / status pill below an input
+ * ───────────────────────────────────────────────────────────── */
+.lg-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--lg-space-2);
+  padding: var(--lg-space-3);
+  border-radius: var(--lg-radius-sm);
+  font-size: 12px;
+  line-height: 1.45;
+  margin-top: var(--lg-space-3);
+  background: var(--lg-banned-soft);
+  color: var(--lg-banned-strong);
+  border: 1px solid #ecbcbc;
+}
+.lg-alert svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * FOOTER — Yumi system signature
+ * ───────────────────────────────────────────────────────────── */
+.lg-footer {
+  margin-top: var(--lg-space-5);
+  text-align: center;
+  font-size: 11px;
+  color: var(--lg-text-subtle);
+  letter-spacing: 0.04em;
+}
+.lg-footer-brand {
+  font-weight: 500;
+  color: var(--lg-text-muted);
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * LOADING SCREEN — minimalist single-line spinner
+ * ───────────────────────────────────────────────────────────── */
+.lg-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--lg-space-3);
+  color: var(--lg-text-muted);
+  font-size: 13px;
+}
+.lg-loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--lg-border);
+  border-top-color: var(--lg-text);
+  border-radius: 50%;
+  animation: lg-spin 0.8s linear infinite;
+}
+@keyframes lg-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * DEV RESET — invisible until "yumi" Konami sequence triggers it
+ * Floating top-right, never shown in production unless typed.
+ * ───────────────────────────────────────────────────────────── */
+.lg-dev-reset {
+  position: fixed;
+  top: var(--lg-space-3);
+  right: var(--lg-space-3);
+  z-index: calc(var(--lg-z-overlay) + 1);
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--lg-text);
+  border: 1px solid var(--lg-text);
+  border-radius: var(--lg-radius-pill, 999px);
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: var(--lg-shadow-md);
+}
+.lg-dev-reset:hover {
+  background: #000;
+}

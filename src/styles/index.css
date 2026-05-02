@@ -1,0 +1,8 @@
+/*
+ * Yumi LicenseGuard — Stylesheet entry point.
+ * Imported once from src/index.tsx so consumers get the styles for free
+ * via their Vite bundler.
+ */
+
+@import './tokens.css';
+@import './components.css';

@@ -1,53 +1,58 @@
-import { ShieldAlert, RefreshCw } from 'lucide-react';
-import { guardTheme } from '../theme';
+import { useState } from 'react';
+import { AlertTriangle, Copy, Check, RefreshCw } from 'lucide-react';
 
 interface Props {
     machineId: string;
     onRetry: () => void;
 }
 
-export const ClockFraudScreen = ({ machineId, onRetry }: Props) => (
-    <div
-        className="fixed inset-0 flex items-center justify-center p-4 font-sans"
-        style={{ backgroundColor: '#F4F1EA', color: '#1A1A1A', fontFamily: guardTheme.fonts.sans }}
-    >
-        <div
-            className="w-full max-w-[360px] rounded-2xl bg-white text-center"
-            style={{ border: '1px solid #E8E5DD', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.05)', padding: '32px 28px' }}
-        >
-            <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-5"
-                style={{ backgroundColor: '#FEE2E2' }}
-            >
-                <ShieldAlert className="w-6 h-6" style={{ color: '#DC2626' }} strokeWidth={2.2} />
-            </div>
+export const ClockFraudScreen = ({ machineId, onRetry }: Props) => {
+    const [copied, setCopied] = useState(false);
 
-            <h1 style={{ fontFamily: guardTheme.fonts.serif, fontSize: 22, fontWeight: 600 }} className="leading-tight mb-2">
-                Anomalie d'horloge
-            </h1>
-            <p className="text-[13px] text-neutral-500 leading-relaxed mb-5">
-                Le système a détecté une heure incohérente.<br/>
-                Resynchronisez l'horloge Windows pour continuer.
-            </p>
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(machineId);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1800);
+        } catch { /* noop */ }
+    };
 
-            <div
-                className="rounded-lg px-3 py-2 mb-4"
-                style={{ border: '1px solid #E8E5DD', backgroundColor: '#FAFAF7' }}
-            >
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 mb-0.5">
-                    Identifiant machine
+    return (
+        <div className="lg-page lg-state-clock">
+            <div className="lg-card">
+                <div className="lg-hero">
+                    <div className="lg-hero-icon">
+                        <AlertTriangle />
+                    </div>
                 </div>
-                <code className="text-[11px] text-neutral-700 font-mono truncate block">{machineId}</code>
-            </div>
 
-            <button
-                onClick={onRetry}
-                className="w-full rounded-lg py-2.5 text-[13px] font-semibold flex items-center justify-center gap-2"
-                style={{ backgroundColor: guardTheme.colors.primary, color: '#FFFFFF' }}
-            >
-                <RefreshCw size={14} />
-                <span>Réessayer</span>
-            </button>
+                <div className="lg-body">
+                    <p className="lg-eyebrow">Anomalie d'horloge</p>
+                    <h1 className="lg-title">Heure système incohérente</h1>
+                    <p className="lg-description">
+                        Une manipulation de l'horloge a été détectée. Resynchronisez l'heure de votre système avec l'heure réelle pour continuer.
+                    </p>
+
+                    <div className="lg-field">
+                        <label className="lg-field-label">Identifiant machine</label>
+                        <button className="lg-hwid" type="button" onClick={handleCopy} title="Cliquer pour copier">
+                            <span className="lg-hwid-value">{machineId}</span>
+                            {copied
+                                ? <Check className="lg-hwid-icon lg-hwid-icon--copied" />
+                                : <Copy className="lg-hwid-icon" />}
+                        </button>
+                    </div>
+
+                    <button className="lg-button" type="button" onClick={onRetry}>
+                        <RefreshCw />
+                        <span>Réessayer</span>
+                    </button>
+
+                    <p className="lg-footer">
+                        Sécurisé par <span className="lg-footer-brand">Yumi LicenseGuard</span>
+                    </p>
+                </div>
+            </div>
         </div>
-    </div>
-);
+    );
+};

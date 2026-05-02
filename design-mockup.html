@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<title>Yumi LicenseGuard — Design proposal</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     YUMI LICENSEGUARD — DESIGN TOKENS
+     This is a system. NOT branded per consumer. Colors vary by STATE only.
+     ───────────────────────────────────────────────────────────── */
+  :root {
+    /* Neutrals */
+    --color-bg:            #f5f5f4;
+    --color-surface:       #ffffff;
+    --color-surface-soft:  #faf9f7;
+    --color-border:        #e8e5e0;
+    --color-text:          #1a1a1a;
+    --color-text-muted:    #6b6b66;
+    --color-text-subtle:   #9a9994;
+
+    /* State colors — orange for activation (Cloudflare-ish trust palette) */
+    --state-activate:        #e47b2a;
+    --state-activate-soft:   #fef0e6;
+    --state-activate-strong: #c25e15;
+
+    --state-expired:         #d97706;
+    --state-expired-soft:    #fef3c7;
+    --state-expired-strong:  #92400e;
+
+    --state-banned:          #b21f1f;
+    --state-banned-soft:     #fbe7e7;
+    --state-banned-strong:   #841515;
+
+    --state-clock:           #b21f1f;
+    --state-clock-soft:      #fbe7e7;
+
+    --state-sync:            #1f6cb1;
+    --state-sync-soft:       #e6f0f8;
+    --state-sync-strong:     #154d80;
+
+    --state-loading:         #6b6b66;
+
+    /* Typography */
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+
+    /* Spacing (8px scale) */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2rem;
+    --space-7: 3rem;
+
+    /* Radius */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+
+    /* Shadow */
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.04);
+    --shadow-md: 0 4px 16px rgba(0,0,0,.06);
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     RESET (minimal)
+     ───────────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-text);
+    background: var(--color-bg);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+  button { font-family: inherit; cursor: pointer; }
+  input { font-family: inherit; }
+
+  /* ─────────────────────────────────────────────────────────────
+     DEMO TOOLBAR — switch between screen states
+     ───────────────────────────────────────────────────────────── */
+  .demo-toolbar {
+    position: fixed; top: 16px; right: 16px; z-index: 10;
+    display: flex; gap: 4px;
+    background: var(--color-surface); border: 1px solid var(--color-border);
+    border-radius: var(--radius-md); padding: 4px;
+    box-shadow: var(--shadow-md);
+  }
+  .demo-toolbar button {
+    border: none; background: transparent; padding: 6px 10px;
+    border-radius: var(--radius-sm); font-size: 12px; color: var(--color-text-muted);
+    font-weight: 500;
+  }
+  .demo-toolbar button.active {
+    background: var(--color-text); color: var(--color-surface);
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     LICENSEGUARD COMPONENTS
+     ───────────────────────────────────────────────────────────── */
+
+  .lg-page {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: var(--space-4);
+  }
+
+  .lg-card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+  }
+
+  /* Hero — illustration + grid pattern, color per state */
+  .lg-hero {
+    position: relative;
+    height: 200px;
+    display: grid;
+    place-items: center;
+    background-color: var(--state-soft);
+    background-image:
+      linear-gradient(var(--state-grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--state-grid-line) 1px, transparent 1px);
+    background-size: 48px 48px;
+    background-position: center;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .lg-hero::before {
+    /* radial fade from center to make grid recede at edges */
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at center, transparent 0%, var(--state-soft) 75%);
+    pointer-events: none;
+  }
+  .lg-hero-icon {
+    position: relative;
+    width: 80px; height: 80px;
+    border-radius: 18px;
+    background: var(--state-color);
+    color: #fff;
+    display: grid; place-items: center;
+    box-shadow:
+      0 8px 24px var(--state-shadow),
+      inset 0 -4px 0 rgba(0,0,0,.06);
+  }
+  .lg-hero-icon svg { width: 40px; height: 40px; }
+
+  /* Body */
+  .lg-body { padding: var(--space-5) var(--space-6) var(--space-6); }
+  .lg-eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--state-color);
+    margin: 0 0 var(--space-2) 0;
+  }
+  .lg-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--color-text);
+    line-height: 1.3;
+    margin: 0 0 var(--space-2) 0;
+    letter-spacing: -0.01em;
+  }
+  .lg-description {
+    font-size: 13.5px;
+    color: var(--color-text-muted);
+    line-height: 1.55;
+    margin: 0 0 var(--space-5) 0;
+  }
+
+  /* Field */
+  .lg-field { margin-bottom: var(--space-4); }
+  .lg-field-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-2);
+  }
+
+  /* Input */
+  .lg-input {
+    width: 100%;
+    height: 38px;
+    padding: 0 var(--space-3);
+    font-size: 13px;
+    font-family: var(--font-mono);
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    transition: border-color 120ms, box-shadow 120ms;
+    outline: none;
+  }
+  .lg-input::placeholder { color: var(--color-text-subtle); font-family: var(--font-sans); }
+  .lg-input:focus {
+    border-color: var(--state-color);
+    box-shadow: 0 0 0 3px var(--state-soft);
+  }
+
+  /* HWID display */
+  .lg-hwid {
+    display: flex; align-items: center; gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-surface-soft);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 120ms;
+    width: 100%;
+  }
+  .lg-hwid:hover { background: var(--color-border); }
+  .lg-hwid-value {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--color-text);
+    flex: 1;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lg-hwid-icon { color: var(--color-text-subtle); flex-shrink: 0; }
+
+  /* Button */
+  .lg-button {
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+    width: 100%;
+    height: 40px;
+    padding: 0 var(--space-4);
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    transition: background 120ms;
+    color: #fff;
+    background: var(--state-color);
+    border-color: var(--state-color);
+  }
+  .lg-button:hover { background: var(--state-strong); border-color: var(--state-strong); }
+  .lg-button[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+  /* Footer */
+  .lg-footer {
+    margin-top: var(--space-5);
+    text-align: center;
+    font-size: 11px;
+    color: var(--color-text-subtle);
+    letter-spacing: 0.04em;
+  }
+  .lg-footer-brand { font-weight: 500; color: var(--color-text-muted); }
+
+  /* ─────────────────────────────────────────────────────────────
+     STATE THEMES (one variable swap, used by hero + button + accents)
+     ───────────────────────────────────────────────────────────── */
+  .state-activate {
+    --state-color: var(--state-activate);
+    --state-soft: var(--state-activate-soft);
+    --state-strong: var(--state-activate-strong);
+    --state-grid-line: rgba(228, 123, 42, 0.10);
+    --state-shadow: rgba(228, 123, 42, 0.30);
+  }
+  .state-expired {
+    --state-color: var(--state-expired);
+    --state-soft: var(--state-expired-soft);
+    --state-strong: var(--state-expired-strong);
+    --state-grid-line: rgba(217, 119, 6, 0.10);
+    --state-shadow: rgba(217, 119, 6, 0.30);
+  }
+  .state-banned {
+    --state-color: var(--state-banned);
+    --state-soft: var(--state-banned-soft);
+    --state-strong: var(--state-banned-strong);
+    --state-grid-line: rgba(178, 31, 31, 0.10);
+    --state-shadow: rgba(178, 31, 31, 0.30);
+  }
+  .state-clock {
+    --state-color: var(--state-clock);
+    --state-soft: var(--state-clock-soft);
+    --state-strong: var(--state-banned-strong);
+    --state-grid-line: rgba(178, 31, 31, 0.10);
+    --state-shadow: rgba(178, 31, 31, 0.30);
+  }
+  .state-sync {
+    --state-color: var(--state-sync);
+    --state-soft: var(--state-sync-soft);
+    --state-strong: var(--state-sync-strong);
+    --state-grid-line: rgba(31, 108, 177, 0.10);
+    --state-shadow: rgba(31, 108, 177, 0.30);
+  }
+
+  /* Loading is minimal — no card hero */
+  .lg-loading {
+    display: flex; align-items: center; gap: var(--space-3);
+    color: var(--color-text-muted);
+    font-size: 13px;
+  }
+  .lg-loading-spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-text);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .screen { display: none; }
+  .screen.active { display: block; }
+</style>
+</head>
+
+<body>
+
+<!-- Demo toolbar -->
+<div class="demo-toolbar">
+  <button onclick="setScreen('activate')" class="active">Activate</button>
+  <button onclick="setScreen('expired')">Expired</button>
+  <button onclick="setScreen('banned')">Banned</button>
+  <button onclick="setScreen('clock')">Clock</button>
+  <button onclick="setScreen('sync')">Sync</button>
+  <button onclick="setScreen('loading')">Loading</button>
+</div>
+
+<!-- ACTIVATE -->
+<div class="screen active state-activate" data-screen="activate">
+  <div class="lg-page">
+    <div class="lg-card">
+      <div class="lg-hero">
+        <div class="lg-hero-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+      </div>
+      <div class="lg-body">
+        <p class="lg-eyebrow">Activation requise</p>
+        <h1 class="lg-title">Activer cette instance</h1>
+        <p class="lg-description">Cette installation n'est pas encore associée à une licence valide. Saisissez la clé fournie par votre administrateur.</p>
+
+        <div class="lg-field">
+          <label class="lg-field-label">Identifiant machine</label>
+          <button class="lg-hwid" type="button" title="Cliquer pour copier">
+            <span class="lg-hwid-value">4391823F-2638-3245-A5EF-2710F1D2F004</span>
+            <svg class="lg-hwid-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          </button>
+        </div>
+
+        <div class="lg-field">
+          <label class="lg-field-label">Clé d'activation</label>
+          <input class="lg-input" type="text" placeholder="Collez la clé fournie" />
+        </div>
+
+        <button class="lg-button" type="button">Activer</button>
+
+        <p class="lg-footer">Sécurisé par <span class="lg-footer-brand">Yumi LicenseGuard</span></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EXPIRED -->
+<div class="screen state-expired" data-screen="expired">
+  <div class="lg-page">
+    <div class="lg-card">
+      <div class="lg-hero">
+        <div class="lg-hero-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+      </div>
+      <div class="lg-body">
+        <p class="lg-eyebrow">Licence expirée</p>
+        <h1 class="lg-title">Période d'utilisation terminée</h1>
+        <p class="lg-description">Votre licence a expiré. Contactez l'administration pour renouveler, ou vérifiez si une mise à jour est disponible.</p>
+
+        <div class="lg-field">
+          <label class="lg-field-label">Identifiant machine</label>
+          <button class="lg-hwid" type="button">
+            <span class="lg-hwid-value">4391823F-2638-3245-A5EF-2710F1D2F004</span>
+            <svg class="lg-hwid-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          </button>
+        </div>
+
+        <button class="lg-button" type="button">Vérifier mon abonnement</button>
+
+        <p class="lg-footer">Sécurisé par <span class="lg-footer-brand">Yumi LicenseGuard</span></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BANNED -->
+<div class="screen state-banned" data-screen="banned">
+  <div class="lg-page">
+    <div class="lg-card">
+      <div class="lg-hero">
+        <div class="lg-hero-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        </div>
+      </div>
+      <div class="lg-body">
+        <p class="lg-eyebrow">Accès suspendu</p>
+        <h1 class="lg-title">Cette licence est suspendue</h1>
+        <p class="lg-description">L'accès à cette instance a été révoqué par l'administration. Veuillez régulariser votre situation pour rétablir le service.</p>
+
+        <div class="lg-field">
+          <label class="lg-field-label">Identifiant machine</label>
+          <button class="lg-hwid" type="button">
+            <span class="lg-hwid-value">4391823F-2638-3245-A5EF-2710F1D2F004</span>
+            <svg class="lg-hwid-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          </button>
+        </div>
+
+        <p class="lg-footer">Sécurisé par <span class="lg-footer-brand">Yumi LicenseGuard</span></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CLOCK FRAUD -->
+<div class="screen state-clock" data-screen="clock">
+  <div class="lg-page">
+    <div class="lg-card">
+      <div class="lg-hero">
+        <div class="lg-hero-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+      </div>
+      <div class="lg-body">
+        <p class="lg-eyebrow">Anomalie d'horloge</p>
+        <h1 class="lg-title">Heure système incohérente</h1>
+        <p class="lg-description">Une manipulation de l'horloge a été détectée. Resynchronisez l'heure de votre système avec l'heure réelle pour continuer.</p>
+
+        <div class="lg-field">
+          <label class="lg-field-label">Identifiant machine</label>
+          <button class="lg-hwid" type="button">
+            <span class="lg-hwid-value">4391823F-2638-3245-A5EF-2710F1D2F004</span>
+            <svg class="lg-hwid-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          </button>
+        </div>
+
+        <button class="lg-button" type="button">Réessayer</button>
+
+        <p class="lg-footer">Sécurisé par <span class="lg-footer-brand">Yumi LicenseGuard</span></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SYNC REQUIRED -->
+<div class="screen state-sync" data-screen="sync">
+  <div class="lg-page">
+    <div class="lg-card">
+      <div class="lg-hero">
+        <div class="lg-hero-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3.51-7.13L21 8"/><polyline points="21 3 21 8 16 8"/></svg>
+        </div>
+      </div>
+      <div class="lg-body">
+        <p class="lg-eyebrow">Validation requise</p>
+        <h1 class="lg-title">Reconnexion au serveur nécessaire</h1>
+        <p class="lg-description">Votre licence n'a pas été vérifiée depuis trop longtemps. Connectez-vous à internet pour confirmer vos droits d'accès.</p>
+
+        <button class="lg-button" type="button">S'authentifier maintenant</button>
+
+        <p class="lg-footer">Sécurisé par <span class="lg-footer-brand">Yumi LicenseGuard</span></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LOADING -->
+<div class="screen" data-screen="loading">
+  <div class="lg-page">
+    <div class="lg-loading">
+      <div class="lg-loading-spinner"></div>
+      <span>Initialisation…</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  function setScreen(name) {
+    document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+    document.querySelector(`[data-screen="${name}"]`).classList.add('active');
+    document.querySelectorAll('.demo-toolbar button').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,107 @@
+/*
+ * Yumi LicenseGuard — Design tokens
+ * Single source of truth. NEVER hardcode values in components or inline styles.
+ *
+ * The guard is a Yumi-branded system. Colors do NOT vary per consumer app —
+ * they vary per LICENSE STATE so the user can identify what is happening
+ * at a glance (orange = activation, amber = expired, red = banned/clock,
+ * blue = sync). Consumers do NOT override these.
+ */
+
+:root {
+  /* ─────────────────────────────────────────────────────────────
+   * 1. Neutrals — premium, warm-grey base
+   * ───────────────────────────────────────────────────────────── */
+  --lg-bg:            #f5f5f4;
+  --lg-surface:       #ffffff;
+  --lg-surface-soft:  #faf9f7;
+  --lg-border:        #e8e5e0;
+  --lg-border-strong: #d4d3d0;
+  --lg-text:          #1a1a1a;
+  --lg-text-muted:    #6b6b66;
+  --lg-text-subtle:   #9a9994;
+
+  /* ─────────────────────────────────────────────────────────────
+   * 2. State palettes — one per license condition
+   *    Each set provides: -color (primary), -soft (background tint),
+   *    -strong (hover/active), and -shadow (drop-shadow rgba).
+   * ───────────────────────────────────────────────────────────── */
+
+  /* Activation — chaleureux, accueil */
+  --lg-activate:        #e47b2a;
+  --lg-activate-soft:   #fef0e6;
+  --lg-activate-strong: #c25e15;
+  --lg-activate-shadow: rgba(228, 123, 42, 0.30);
+
+  /* Expired — alerte douce */
+  --lg-expired:         #d97706;
+  --lg-expired-soft:    #fef3c7;
+  --lg-expired-strong:  #92400e;
+  --lg-expired-shadow:  rgba(217, 119, 6, 0.30);
+
+  /* Banned — interdit */
+  --lg-banned:          #b21f1f;
+  --lg-banned-soft:     #fbe7e7;
+  --lg-banned-strong:   #841515;
+  --lg-banned-shadow:   rgba(178, 31, 31, 0.30);
+
+  /* Clock fraud — warning grave (même palette que banned) */
+  --lg-clock:           #b21f1f;
+  --lg-clock-soft:      #fbe7e7;
+  --lg-clock-strong:    #841515;
+  --lg-clock-shadow:    rgba(178, 31, 31, 0.30);
+
+  /* Sync required — info, action requise */
+  --lg-sync:            #1f6cb1;
+  --lg-sync-soft:       #e6f0f8;
+  --lg-sync-strong:     #154d80;
+  --lg-sync-shadow:     rgba(31, 108, 177, 0.30);
+
+  /* ─────────────────────────────────────────────────────────────
+   * 3. Typography — Inter as the system font
+   * ───────────────────────────────────────────────────────────── */
+  --lg-font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --lg-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* ─────────────────────────────────────────────────────────────
+   * 4. Spacing (8px scale)
+   * ───────────────────────────────────────────────────────────── */
+  --lg-space-1: 0.25rem;
+  --lg-space-2: 0.5rem;
+  --lg-space-3: 0.75rem;
+  --lg-space-4: 1rem;
+  --lg-space-5: 1.5rem;
+  --lg-space-6: 2rem;
+  --lg-space-7: 3rem;
+
+  /* ─────────────────────────────────────────────────────────────
+   * 5. Border radius
+   * ───────────────────────────────────────────────────────────── */
+  --lg-radius-sm: 6px;
+  --lg-radius-md: 10px;
+  --lg-radius-lg: 16px;
+  --lg-radius-icon: 18px;
+
+  /* ─────────────────────────────────────────────────────────────
+   * 6. Shadows — minimal, never overwrought
+   * ───────────────────────────────────────────────────────────── */
+  --lg-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --lg-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
+
+  /* ─────────────────────────────────────────────────────────────
+   * 7. Motion
+   * ───────────────────────────────────────────────────────────── */
+  --lg-duration-fast: 120ms;
+  --lg-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ─────────────────────────────────────────────────────────────
+   * 8. Z-index — stays above the consumer's app shell
+   * ───────────────────────────────────────────────────────────── */
+  --lg-z-overlay: 9000;
+
+  /* ─────────────────────────────────────────────────────────────
+   * 9. Layout
+   * ───────────────────────────────────────────────────────────── */
+  --lg-card-max-width: 420px;
+  --lg-hero-height: 200px;
+}
