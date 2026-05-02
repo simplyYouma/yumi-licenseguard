@@ -6,6 +6,9 @@
  */
 
 interface ImportMetaEnv {
+    readonly DEV: boolean;
+    readonly PROD: boolean;
+    readonly MODE: string;
     readonly VITE_YUMI_HUB_URL?: string;
     readonly VITE_YUMI_PROJECT_ID?: string;
     readonly VITE_PROJECT_NAME?: string;

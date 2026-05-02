@@ -101,6 +101,15 @@ pub mod commands {
 
     #[tauri::command]
     pub fn verify_license(machine_id: String, license_key: String) -> bool {
+        // Dev bypass — debug builds only. The cfg gate strips this branch
+        // entirely from release binaries (cargo build --release / tauri build),
+        // so production never honors it.
+        #[cfg(debug_assertions)]
+        if license_key == "DEV-BYPASS" {
+            let _ = machine_id;
+            return true;
+        }
+
         let Ok(pub_bytes) = hex::decode(HUB_PUBLIC_KEY_HEX) else {
             return false;
         };

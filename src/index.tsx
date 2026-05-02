@@ -25,6 +25,8 @@ import { SyncRequiredScreen } from './screens/SyncRequiredScreen';
 
 interface LicenseGuardProps {
     children: React.ReactNode;
+    /** Optional brand logo shown on the activation screen. Pass a Vite-imported asset URL. */
+    logoUrl?: string;
 }
 
 /**
@@ -32,7 +34,7 @@ interface LicenseGuardProps {
  * 
  * Manages the security lifecycle and displays appropriate blocking screens.
  */
-export const LicenseGuard: React.FC<LicenseGuardProps> = ({ children }) => {
+export const LicenseGuard: React.FC<LicenseGuardProps> = ({ children, logoUrl }) => {
     const license = useLicense();
     const [isBannerDismissed, setIsBannerDismissed] = useState(false);
     const [showManual, setShowManual] = useState(false);
@@ -108,7 +110,7 @@ export const LicenseGuard: React.FC<LicenseGuardProps> = ({ children }) => {
     }
 
     if (!license.isLicensed) {
-        return <ThemeWrapper><ActivationScreen machineId={license.machineId} isValidating={license.isValidating} onActivate={license.activateLicense} /></ThemeWrapper>;
+        return <ThemeWrapper><ActivationScreen machineId={license.machineId} isValidating={license.isValidating} onActivate={license.activateLicense} logoUrl={logoUrl} /></ThemeWrapper>;
     }
 
     return (
