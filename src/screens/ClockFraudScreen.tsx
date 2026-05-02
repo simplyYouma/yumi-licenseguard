@@ -1,29 +1,53 @@
-import React from 'react';
-import { ShieldAlert } from 'lucide-react';
+import { ShieldAlert, RefreshCw } from 'lucide-react';
+import { guardTheme } from '../theme';
 
 interface Props {
     machineId: string;
     onRetry: () => void;
 }
 
-export const ClockFraudScreen: React.FC<Props> = ({ machineId, onRetry }) => {
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900 font-outfit px-4 text-slate-900">
-            <div className="bg-white p-12 rounded-[40px] shadow-2xl max-w-md w-full text-center border-b-8 border-rose-600 animate-in zoom-in duration-500">
-                <div className="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-8 animate-pulse text-rose-600 border border-rose-100">
-                        <ShieldAlert className="w-10 h-10" />
-                </div>
-                <h2 className="text-3xl font-black mb-4 tracking-tight uppercase">Fraude Horloge</h2>
-                <p className="text-sm text-slate-400 mb-8 leading-relaxed font-medium">
-                    Une anomalie d'horloge système a été détectée. 
-                    Synchronisez l'heure de Windows sur l'heure réelle pour continuer.
-                </p>
-                <div className="bg-slate-50 p-4 rounded-2xl mb-8 border border-slate-100/50">
-                        <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-1 font-bold">Terminal ID</p>
-                        <p className="text-xs font-mono font-bold text-slate-600">{machineId}</p>
-                </div>
-                <button onClick={onRetry} className="w-full bg-slate-900 text-white font-black py-5 rounded-3xl hover:bg-slate-800 transition-all uppercase tracking-[0.2em] text-xs shadow-xl active:scale-95">RÉ-INITIATION</button>
+export const ClockFraudScreen = ({ machineId, onRetry }: Props) => (
+    <div
+        className="fixed inset-0 flex items-center justify-center p-4 font-sans"
+        style={{ backgroundColor: '#F4F1EA', color: '#1A1A1A', fontFamily: guardTheme.fonts.sans }}
+    >
+        <div
+            className="w-full max-w-[360px] rounded-2xl bg-white text-center"
+            style={{ border: '1px solid #E8E5DD', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.05)', padding: '32px 28px' }}
+        >
+            <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-5"
+                style={{ backgroundColor: '#FEE2E2' }}
+            >
+                <ShieldAlert className="w-6 h-6" style={{ color: '#DC2626' }} strokeWidth={2.2} />
             </div>
+
+            <h1 style={{ fontFamily: guardTheme.fonts.serif, fontSize: 22, fontWeight: 600 }} className="leading-tight mb-2">
+                Anomalie d'horloge
+            </h1>
+            <p className="text-[13px] text-neutral-500 leading-relaxed mb-5">
+                Le système a détecté une heure incohérente.<br/>
+                Resynchronisez l'horloge Windows pour continuer.
+            </p>
+
+            <div
+                className="rounded-lg px-3 py-2 mb-4"
+                style={{ border: '1px solid #E8E5DD', backgroundColor: '#FAFAF7' }}
+            >
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 mb-0.5">
+                    Identifiant machine
+                </div>
+                <code className="text-[11px] text-neutral-700 font-mono truncate block">{machineId}</code>
+            </div>
+
+            <button
+                onClick={onRetry}
+                className="w-full rounded-lg py-2.5 text-[13px] font-semibold flex items-center justify-center gap-2"
+                style={{ backgroundColor: guardTheme.colors.primary, color: '#FFFFFF' }}
+            >
+                <RefreshCw size={14} />
+                <span>Réessayer</span>
+            </button>
         </div>
-    );
-};
+    </div>
+);
