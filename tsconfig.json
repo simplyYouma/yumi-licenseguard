@@ -15,8 +15,8 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
-    "types": ["vite/client"],
-    "noEmit": true
+    "noEmit": true,
+    "types": []
   },
   "include": ["src/**/*"]
 }
