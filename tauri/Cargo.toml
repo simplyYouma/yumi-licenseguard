@@ -1,6 +1,6 @@
 [package]
 name         = "yumi-licenseguard"
-version      = "2.1.0"
+version      = "2.1.1"
 edition      = "2024"
 rust-version = "1.85"
 description  = "Shared LicenseGuard backend for Yumi POS Tauri apps — HWID, Ed25519 verification, and tamper-resistant secure storage."
