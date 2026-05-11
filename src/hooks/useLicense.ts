@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { LicenseState, Notification } from '../types';
 import { guardTheme } from '../theme';
@@ -8,6 +8,19 @@ import { guardTheme } from '../theme';
 // ============================================================
 const YUMI_HUB_API = import.meta.env.VITE_YUMI_HUB_URL || "http://localhost:4000/api/verify";
 const YUMI_PROJECT_ID = (import.meta.env.VITE_YUMI_PROJECT_ID || "").replace(/"/g, "");
+
+// Bornes de sécurité pour les valeurs serveur — un Hub mal configuré ne doit
+// jamais pouvoir geler tous les POS (5 min minimum) ni les laisser dériver
+// pendant des semaines (24 h max).
+const MIN_VERIFY_MS = 5 * 60 * 1000;
+const MAX_VERIFY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_VERIFY_MS = 20 * 60 * 1000;
+const MIN_GRACE_DAYS = 1;
+const MAX_GRACE_DAYS = 365;
+
+function clamp(n: number, lo: number, hi: number): number {
+    return Math.max(lo, Math.min(hi, n));
+}
 
 export function useLicense() {
     const [state, setState] = useState<LicenseState>({
@@ -24,6 +37,13 @@ export function useLicense() {
     const [activeNotif, setActiveNotif] = useState<Notification | null>(null);
     const [isValidating, setIsValidating] = useState(false);
     const [syncError, setSyncError] = useState(false);
+
+    // Cadence + grace : seedés depuis le theme.ts (défauts), puis écrasés par
+    // les valeurs renvoyées par le Hub à chaque verify. Stockés en ref pour
+    // éviter de relancer l'effet d'init à chaque changement de valeur.
+    const nextVerifyMsRef = useRef<number>(DEFAULT_VERIFY_MS);
+    const graceMinsRef    = useRef<number>(guardTheme.config.syncLockMins);
+    const warningMinsRef  = useRef<number>(guardTheme.config.syncWarningMins);
 
     // --- Actions ---
 
@@ -67,6 +87,19 @@ export function useLicense() {
 
                 // --- 2. POSITIVE CHECKS ---
                 setState(prev => ({ ...prev, isRevoked: false, isExpired: false, isLicensed: true }));
+
+                // --- Cadence pilotée par le Hub (depuis v2.3.0) ---
+                // Si le Hub a tourné un patch et renvoie ces champs, on les
+                // adopte (avec clamp sécurité). Sinon on garde les défauts.
+                if (typeof data.nextVerifyMs === 'number') {
+                    nextVerifyMsRef.current = clamp(data.nextVerifyMs, MIN_VERIFY_MS, MAX_VERIFY_MS);
+                }
+                if (typeof data.graceDays === 'number') {
+                    graceMinsRef.current = clamp(data.graceDays, MIN_GRACE_DAYS, MAX_GRACE_DAYS) * 24 * 60;
+                }
+                if (typeof data.warningDays === 'number') {
+                    warningMinsRef.current = clamp(data.warningDays, 0, MAX_GRACE_DAYS) * 24 * 60;
+                }
 
                 // --- Notifications Broadcast ---
                 if (data.notifications && data.notifications.length > 0) {
@@ -187,14 +220,15 @@ export function useLicense() {
                     return;
                 }
 
-                // Sync Requirement
+                // Sync Requirement — utilise les valeurs Hub si déjà reçues
+                // (verify précédent), sinon les défauts du theme.
                 const minsSinceSync = (now - lastSync) / (1000 * 60);
-                if (lastSync > 0 && minsSinceSync > guardTheme.config.syncLockMins) {
+                if (lastSync > 0 && minsSinceSync > graceMinsRef.current) {
                     setState(prev => ({ ...prev, isSyncRequired: true, isLicensed: false }));
                     return;
                 }
 
-                if (lastSync > 0 && minsSinceSync > guardTheme.config.syncWarningMins) {
+                if (lastSync > 0 && minsSinceSync > warningMinsRef.current) {
                     setState(prev => ({ ...prev, isSyncWarning: true }));
                 }
 
@@ -230,9 +264,25 @@ export function useLicense() {
                     // Vérification Hub obligatoire — la BDD est la source de vérité
                     await verifyWithHub(hwid);
 
-                    // Cycles de vérification périodique toutes les 20 minutes
-                    const hubInt = setInterval(() => verifyWithHub(hwid), 20 * 60 * 1000);
-                    return () => clearInterval(hubInt);
+                    // Cycles de vérification périodique. Cadence pilotée par
+                    // le Hub via `nextVerifyMsRef` (renseigné par verifyWithHub).
+                    // setTimeout récursif au lieu de setInterval pour que chaque
+                    // tick lise la valeur la plus récente — un changement côté
+                    // admin prend effet dès le verify suivant.
+                    let timer: ReturnType<typeof setTimeout> | null = null;
+                    let cancelled = false;
+                    const schedule = () => {
+                        if (cancelled) return;
+                        timer = setTimeout(async () => {
+                            await verifyWithHub(hwid);
+                            schedule();
+                        }, nextVerifyMsRef.current);
+                    };
+                    schedule();
+                    return () => {
+                        cancelled = true;
+                        if (timer) clearTimeout(timer);
+                    };
                 } else {
                     setState(prev => ({ ...prev, isLicensed: false }));
                 }
