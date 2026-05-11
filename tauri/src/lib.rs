@@ -32,9 +32,32 @@ pub mod commands {
         "eef17a2365fe4e7d9fbad5d87741f79979e00055108be650d57ece534d53360a";
 
     // ── Hardware ID ────────────────────────────────────────────────────────
+    //
+    // Stratégie par plateforme :
+    //
+    //   • Windows  → UUID matériel via WMIC csproduct / registre Cryptography
+    //                (stable cross-reboot, change si la carte mère change —
+    //                comportement attendu pour une licence par machine)
+    //   • macOS    → IOPlatformUUID via ioreg (équivalent matériel)
+    //   • Linux    → /etc/machine-id (systemd, stable cross-reboot)
+    //   • Android  → UUID v4 persistant dans app_data_dir. Stable
+    //                cross-launch ; reset à la désinstallation. Contrat
+    //                "licence par installation" — équivalent à ce que font
+    //                Slack, Discord et la plupart des apps cross-platform
+    //                mobiles. ANDROID_ID via JNI demanderait un build NDK
+    //                non trivial pour un gain marginal.
+    //   • iOS      → identique à Android. Apple décourage
+    //                identifierForVendor pour les usages licence.
+    //   • Fallback → "FALLBACK_MACHINE_ID" — visible au support, pas de
+    //                panique runtime.
+    //
+    // La signature unifiée `read_machine_id(&AppHandle)` permet à
+    // Android/iOS d'utiliser l'AppHandle pour persister leur UUID. Côté JS,
+    // `invoke('get_machine_id')` reste inchangé — Tauri injecte
+    // automatiquement l'AppHandle.
 
     #[cfg(target_os = "windows")]
-    fn read_machine_id() -> String {
+    fn read_machine_id(_app: &AppHandle) -> String {
         use std::process::Command;
 
         // 1. WMIC csproduct UUID — most stable across reboots and clones.
@@ -84,17 +107,89 @@ pub mod commands {
         "ID-MOTEUR-YUMI-NON-IDENTIFIE".to_string()
     }
 
-    #[cfg(not(target_os = "windows"))]
-    fn read_machine_id() -> String {
+    #[cfg(target_os = "macos")]
+    fn read_machine_id(_app: &AppHandle) -> String {
+        use std::process::Command;
+        if let Ok(output) = Command::new("ioreg")
+            .args(["-rd1", "-c", "IOPlatformExpertDevice"])
+            .output()
+        {
+            let raw = String::from_utf8_lossy(&output.stdout);
+            for line in raw.lines() {
+                if line.contains("IOPlatformUUID") {
+                    if let Some(eq) = line.split('=').nth(1) {
+                        let id = eq.trim().trim_matches('"').to_string();
+                        if !id.is_empty() {
+                            return id;
+                        }
+                    }
+                }
+            }
+        }
+        "FALLBACK_MACHINE_ID".to_string()
+    }
+
+    #[cfg(all(
+        target_family = "unix",
+        not(target_os = "macos"),
+        not(target_os = "android"),
+        not(target_os = "ios"),
+    ))]
+    fn read_machine_id(_app: &AppHandle) -> String {
         if let Ok(id) = fs::read_to_string("/etc/machine-id") {
             return id.trim().to_string();
         }
         "FALLBACK_MACHINE_ID".to_string()
     }
 
+    /// Plateformes mobiles : lit ou génère un identifiant d'installation.
+    /// Stocké en clair dans `<app_data_dir>/.install_id` — l'OS isole déjà
+    /// le sandbox d'app, et un chiffrement local apporterait peu (un
+    /// attaquant ayant accès au sandbox a déjà accès à .license aussi).
+    /// Format UUID v4. Stable cross-launch ; remis à zéro à la
+    /// désinstallation (limite acceptée du modèle "licence par install").
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    fn read_machine_id(app: &AppHandle) -> String {
+        let Ok(dir) = app.path().app_data_dir() else {
+            return "FALLBACK_MACHINE_ID".to_string();
+        };
+        if !dir.exists() {
+            let _ = fs::create_dir_all(&dir);
+        }
+        let path = dir.join(".install_id");
+
+        if let Ok(existing) = fs::read_to_string(&path) {
+            let trimmed = existing.trim().to_string();
+            if !trimmed.is_empty() {
+                return trimmed;
+            }
+        }
+
+        // Première installation : on génère un UUID v4 et on le persiste.
+        // Si l'écriture échoue (sandbox read-only, disque plein), on renvoie
+        // quand même l'UUID en mémoire — la licence ne s'enregistrera pas
+        // pour cette session mais l'app démarre.
+        let id = uuid::Uuid::new_v4().to_string();
+        let _ = fs::write(&path, &id);
+        id
+    }
+
+    /// Plateformes non couvertes (wasm32, redox…) — libellé identifiable
+    /// pour le support, sans panique runtime.
+    #[cfg(not(any(
+        target_os = "windows",
+        target_os = "macos",
+        all(target_family = "unix", not(target_os = "macos"), not(target_os = "android"), not(target_os = "ios")),
+        target_os = "android",
+        target_os = "ios",
+    )))]
+    fn read_machine_id(_app: &AppHandle) -> String {
+        "UNSUPPORTED_PLATFORM".to_string()
+    }
+
     #[tauri::command]
-    pub fn get_machine_id() -> String {
-        read_machine_id().to_uppercase()
+    pub fn get_machine_id(app: AppHandle) -> String {
+        read_machine_id(&app).to_uppercase()
     }
 
     // ── Ed25519 verification ───────────────────────────────────────────────

@@ -1,9 +1,9 @@
 [package]
 name         = "yumi-licenseguard"
-version      = "2.1.1"
+version      = "2.2.0"
 edition      = "2024"
 rust-version = "1.85"
-description  = "Shared LicenseGuard backend for Yumi POS Tauri apps — HWID, Ed25519 verification, and tamper-resistant secure storage."
+description  = "Shared LicenseGuard backend for Yumi POS Tauri apps — HWID, Ed25519 verification, and tamper-resistant secure storage. Cross-platform : Windows, Linux, macOS, Android, iOS."
 
 [lib]
 name       = "yumi_licenseguard"
@@ -15,3 +15,7 @@ tauri          = { version = "2.10.3" }
 ed25519-dalek  = { version = "2.1.1", features = ["serde"] }
 hex            = "0.4.3"
 serde          = { version = "1.0", features = ["derive"] }
+# uuid : génération d'un identifiant d'installation pour les plateformes
+# où aucun HWID stable n'est exposé sans permissions sensibles
+# (Android sandbox, iOS). Persistant dans app_data_dir.
+uuid           = { version = "1", features = ["v4"] }
