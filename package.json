@@ -1,6 +1,6 @@
 {
   "name": "@yumi/licenseguard",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "private": true,
   "description": "Shared LicenseGuard React component — single source of truth for the activation/expiry/sync UI across all Yumi POS apps. Consumed via TypeScript source by Vite/Tauri client projects.",
   "type": "module",

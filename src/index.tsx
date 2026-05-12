@@ -26,6 +26,8 @@ export type { LicenseState, Notification } from './types';
 
 // Auto-updater hook — host apps wire it once at App.tsx mount.
 export { useUpdater } from './hooks/useUpdater';
+// Drop-in button for the Settings page : check + install in one widget.
+export { UpdateCheckButton } from './components/UpdateCheckButton';
 
 interface LicenseGuardProps {
     children: React.ReactNode;
