@@ -24,6 +24,9 @@ export { SyncWarning } from './components/SyncWarning';
 export { guardTheme } from './theme';
 export type { LicenseState, Notification } from './types';
 
+// Auto-updater hook — host apps wire it once at App.tsx mount.
+export { useUpdater } from './hooks/useUpdater';
+
 interface LicenseGuardProps {
     children: React.ReactNode;
 }
