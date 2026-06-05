@@ -240,10 +240,26 @@ export function useLicense() {
                 if (parts.length === 2) {
                     const expiry = parseInt(parts[0], 16);
                     if (now > expiry) {
-                        setState(prev => ({ ...prev, isExpired: true, isLicensed: false }));
-                        // Try Hub — admin may have renewed with a new key
-                        await verifyWithHub(hwid);
-                        return; // No local access on expired key; Hub is the only exit
+                        // La clé LOCALE paraît expirée — mais l'admin a peut-être
+                        // renouvelé côté Hub (la BDD est la source de vérité, et la
+                        // clé locale garde l'ancienne date tant que le Hub ne renvoie
+                        // pas de clé fraîche). On interroge donc le Hub D'ABORD, en
+                        // restant sur l'écran de chargement (isLicensed reste null),
+                        // et on n'affiche l'écran "Expirée" que si le Hub confirme
+                        // l'expiration OU est injoignable. Évite le flash orange à
+                        // chaque démarrage après un renouvellement.
+                        setIsValidating(true);
+                        const ok = await verifyWithHub(hwid);
+                        setIsValidating(false);
+                        if (!ok) {
+                            // Hub a confirmé l'expiration / révocation (déjà reflété
+                            // dans le state) ou est injoignable → bloquer en mode
+                            // expiré, hors-ligne sur une clé périmée.
+                            setState(prev => prev.isLicensed === false
+                                ? prev
+                                : { ...prev, isExpired: true, isLicensed: false });
+                        }
+                        return; // Le Hub gère le chemin licencié/renouvelé (et le reload éventuel)
                     }
                     msgToVerify = `${YUMI_PROJECT_ID}|${hwid}|${expiry}`;
                     sigToVerify = parts[1];
