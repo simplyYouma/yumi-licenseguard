@@ -8,6 +8,7 @@ import './styles/index.css';
 import { useLicense } from './hooks/useLicense';
 import { HubNotification } from './components/HubNotification';
 import { SyncWarning } from './components/SyncWarning';
+import { AutoUpdateBanner } from './components/AutoUpdateBanner';
 
 // Screens
 import { LoadingScreen } from './screens/LoadingScreen';
@@ -28,6 +29,8 @@ export type { LicenseState, Notification } from './types';
 export { useUpdater } from './hooks/useUpdater';
 // Drop-in button for the Settings page : check + install in one widget.
 export { UpdateCheckButton } from './components/UpdateCheckButton';
+// Bannière auto-update — rendue automatiquement par LicenseGuard (tous les POS).
+export { AutoUpdateBanner } from './components/AutoUpdateBanner';
 
 interface LicenseGuardProps {
     children: React.ReactNode;
@@ -123,6 +126,10 @@ export const LicenseGuard: React.FC<LicenseGuardProps> = ({ children }) => {
             {license.activeNotif && (
                 <HubNotification notification={license.activeNotif} onDismiss={license.dismissNotification} />
             )}
+            {/* Auto-update : vérifie le Hub au boot + toutes les 6h, propose
+                l'installation. Intégré ici → actif pour TOUS les POS sans
+                câblage par app. */}
+            <AutoUpdateBanner />
             {showManual && (
                 <button
                     className="lg-dev-reset"
