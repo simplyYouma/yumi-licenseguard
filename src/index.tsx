@@ -52,6 +52,38 @@ export const LicenseGuard: React.FC<LicenseGuardProps> = ({ children }) => {
     const license = useLicense();
     const [isBannerDismissed, setIsBannerDismissed] = useState(false);
     const [showManual, setShowManual] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    // "Sync Now" de l'écran SyncRequired. Trois tentatives espacées :
+    // juste après un retour de connexion, la première requête échoue
+    // souvent (DNS/TLS pas encore rétablis dans la webview) alors que la
+    // suivante passe — sans retry, l'utilisateur voyait "Hub indisponible"
+    // à tort et devait recharger manuellement.
+    const runSync = async () => {
+        if (isSyncing) return;
+        setIsSyncing(true);
+        license.setSyncError(false);
+        try {
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                const result = await license.verifyWithHub();
+                if (result === 'ok') {
+                    // last_sync est à jour et isSyncRequired levé — reload
+                    // pour repartir sur un boot complet (timers périodiques).
+                    window.location.reload();
+                    return;
+                }
+                if (result === 'refused') {
+                    // Le Hub a répondu : le state affiche déjà le bon écran
+                    // (banni / expiré / activation) — pas une erreur réseau.
+                    return;
+                }
+                if (attempt < 3) await new Promise(r => setTimeout(r, 1200 * attempt));
+            }
+            license.setSyncError(true);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     // Konami "yumi" sequence — discreet dev reset trigger. Type the four
     // letters in order, anywhere in the app, to surface a reset button
@@ -82,20 +114,6 @@ export const LicenseGuard: React.FC<LicenseGuardProps> = ({ children }) => {
     if (license.isRevoked) {
         return <BannedScreen machineId={license.machineId} />;
     }
-    if (license.isSyncRequired) {
-        return (
-            <SyncRequiredScreen
-                isValidating={license.isValidating}
-                syncError={license.syncError}
-                onSync={async () => {
-                    license.setSyncError(false);
-                    const synced = await license.verifyWithHub();
-                    if (synced) window.location.reload();
-                    else license.setSyncError(true);
-                }}
-            />
-        );
-    }
     if (license.isExpired) {
         return (
             <ExpiredScreen
@@ -104,6 +122,15 @@ export const LicenseGuard: React.FC<LicenseGuardProps> = ({ children }) => {
                 isValidating={license.isValidating}
                 onSync={async () => { await license.verifyWithHub(); }}
                 onReset={async () => { await invoke('save_license_key', { key: '' }); window.location.reload(); }}
+            />
+        );
+    }
+    if (license.isSyncRequired) {
+        return (
+            <SyncRequiredScreen
+                isValidating={isSyncing || license.isValidating}
+                syncError={license.syncError}
+                onSync={runSync}
             />
         );
     }

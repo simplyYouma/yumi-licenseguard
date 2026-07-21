@@ -50,18 +50,32 @@ export function useLicense() {
     /**
      * Centralized verification with Yumi Hub.
      * Source of truth: database via Hub.
-     * Returns true if Hub confirmed the license is active.
+     * 'ok'          → licence active confirmée par le Hub.
+     * 'refused'     → le Hub a répondu mais la licence n'est pas valide
+     *                 (le state reflète déjà la raison : banni, expiré…).
+     * 'unreachable' → réseau/Hub injoignable (rien de fiable reçu).
      */
-    const verifyWithHub = useCallback(async (hwid: string): Promise<boolean> => {
-        if (!YUMI_PROJECT_ID) return false;
+    const verifyWithHub = useCallback(async (hwid: string): Promise<'ok' | 'refused' | 'unreachable'> => {
+        if (!YUMI_PROJECT_ID) return 'unreachable';
 
         try {
-            const res = await fetch(YUMI_HUB_API, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ hwid, project_id: YUMI_PROJECT_ID }),
-                cache: 'no-store'
-            });
+            // Timeout explicite : après un retour de connexion, un fetch sans
+            // timeout peut rester suspendu indéfiniment dans la webview — seul
+            // un reload le débloquait. 15 s puis on tranche "unreachable".
+            const abort = new AbortController();
+            const timeout = setTimeout(() => abort.abort(), 15000);
+            let res: Response;
+            try {
+                res = await fetch(YUMI_HUB_API, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ hwid, project_id: YUMI_PROJECT_ID }),
+                    cache: 'no-store',
+                    signal: abort.signal
+                });
+            } finally {
+                clearTimeout(timeout);
+            }
 
             if (res.ok) {
                 const data = await res.json();
@@ -70,23 +84,33 @@ export function useLicense() {
                 setState(prev => ({ ...prev, lastSyncDate: now }));
 
                 // --- 1. NEGATIVE CHECKS (FAIL-CLOSED) ---
+                // Le Hub a répondu : l'état de sync est frais, on lève le
+                // verrou isSyncRequired pour laisser l'écran de la vraie
+                // raison (banni/expiré…) prendre le relais.
                 if (!data.valid) {
                     if (data.reason === "BANNED") {
-                        setState(prev => ({ ...prev, isRevoked: true, isLicensed: false }));
+                        setState(prev => ({ ...prev, isRevoked: true, isLicensed: false, isSyncRequired: false }));
                     } else if (data.reason === "EXPIRED") {
-                        setState(prev => ({ ...prev, isExpired: true, isLicensed: false }));
+                        setState(prev => ({ ...prev, isExpired: true, isLicensed: false, isSyncRequired: false }));
                     } else if (data.reason === "NOT_FOUND") {
                         console.warn("[LicenseGuard] License not found on Hub. Performing remote wipe.");
                         await invoke('save_license_key', { key: '' });
                         window.location.reload();
                     } else {
-                        setState(prev => ({ ...prev, isLicensed: false }));
+                        setState(prev => ({ ...prev, isLicensed: false, isSyncRequired: false }));
                     }
-                    return false;
+                    return 'refused';
                 }
 
                 // --- 2. POSITIVE CHECKS ---
-                setState(prev => ({ ...prev, isRevoked: false, isExpired: false, isLicensed: true }));
+                setState(prev => ({
+                    ...prev,
+                    isRevoked: false,
+                    isExpired: false,
+                    isLicensed: true,
+                    isSyncRequired: false,
+                    isSyncWarning: false
+                }));
 
                 // --- Cadence pilotée par le Hub (depuis v2.3.0) ---
                 // Si le Hub a tourné un patch et renvoie ces champs, on les
@@ -121,12 +145,12 @@ export function useLicense() {
                     }
                 }
 
-                return true;
+                return 'ok';
             }
         } catch (e) {
             console.error("[LicenseGuard] Hub Unreachable:", e);
         }
-        return false;
+        return 'unreachable';
     }, []);
 
 
@@ -249,7 +273,7 @@ export function useLicense() {
                         // l'expiration OU est injoignable. Évite le flash orange à
                         // chaque démarrage après un renouvellement.
                         setIsValidating(true);
-                        const ok = await verifyWithHub(hwid);
+                        const ok = (await verifyWithHub(hwid)) === 'ok';
                         setIsValidating(false);
                         if (!ok) {
                             // Hub a confirmé l'expiration / révocation (déjà reflété
