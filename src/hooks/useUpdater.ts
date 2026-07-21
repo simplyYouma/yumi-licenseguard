@@ -45,6 +45,59 @@ interface UseUpdaterResult {
 
 const DEFAULT_INTERVAL = 6 * 60 * 60 * 1000; // 6 h
 
+/** Compare deux versions SemVer numériques. true si `candidate` > `current`. */
+export function isNewerVersion(candidate: string, current: string): boolean {
+    const parse = (v: string) =>
+        v.trim().replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
+    const a = parse(candidate);
+    const b = parse(current);
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        const diff = (a[i] ?? 0) - (b[i] ?? 0);
+        if (diff !== 0) return diff > 0;
+    }
+    return false;
+}
+
+/** Manifeste renvoyé par le Hub (même format que tauri-plugin-updater). */
+interface HubUpdateManifest {
+    version: string;
+    pub_date?: string;
+    url: string;
+    signature: string;
+    notes?: string;
+}
+
+/**
+ * Chemin Android : tauri-plugin-updater est desktop-only, le flux APK est
+ * porté par le crate yumi-licenseguard (commandes get_updater_endpoint +
+ * download_and_install_apk — téléchargement, vérif minisign, installeur
+ * système). Même manifeste Hub, même bannière, même UX que desktop.
+ */
+async function checkAndroid(): Promise<AvailableUpdate | null> {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const info = await invoke<{ endpoint: string; currentVersion: string }>(
+        'get_updater_endpoint',
+    );
+    const res = await fetch(info.endpoint, { cache: 'no-store' });
+    if (res.status !== 200) return null; // 204 = à jour, autre = pas de release
+    const manifest = (await res.json()) as HubUpdateManifest;
+    if (!manifest?.version || !manifest.url || !manifest.signature) return null;
+    if (!isNewerVersion(manifest.version, info.currentVersion)) return null;
+    return {
+        version: manifest.version,
+        notes: manifest.notes ?? null,
+        date: manifest.pub_date ?? null,
+        install: async () => {
+            // Rust télécharge, vérifie la signature minisign et ouvre
+            // l'installeur système — Android gère la confirmation.
+            await invoke('download_and_install_apk', {
+                url: manifest.url,
+                signature: manifest.signature,
+            });
+        },
+    };
+}
+
 export function useUpdater(opts: UseUpdaterOptions = {}): UseUpdaterResult {
     const { intervalMs = DEFAULT_INTERVAL, enabled = true } = opts;
     const [update, setUpdate] = useState<AvailableUpdate | null>(null);
@@ -56,13 +109,21 @@ export function useUpdater(opts: UseUpdaterOptions = {}): UseUpdaterResult {
         // Hors Tauri (web preview / SSR) : on ne fait rien.
         if (!('__TAURI_INTERNALS__' in window)) return;
 
-        // Android : tauri-plugin-updater compile mais son install() est un
-        // no-op sur mobile (support officiel = "none") — la bannière
-        // proposerait une installation factice. On désactive jusqu'à
-        // l'implémentation du flux APK natif (téléchargement + intent
-        // PackageInstaller). Les tablettes restent mises à jour par APK.
+        // Android : flux APK natif porté par le crate yumi-licenseguard
+        // (tauri-plugin-updater est desktop-only).
         if (/android/i.test(navigator.userAgent)) {
-            console.info('[useUpdater] Android : auto-update natif non supporté par tauri-plugin-updater — check ignoré.');
+            setIsChecking(true);
+            setError(null);
+            try {
+                setUpdate(await checkAndroid());
+            } catch (e) {
+                const msg = (e as Error)?.message ?? String(e);
+                console.warn('[useUpdater] android check failed:', msg);
+                setError(msg);
+                setUpdate(null);
+            } finally {
+                setIsChecking(false);
+            }
             return;
         }
 

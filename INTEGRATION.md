@@ -89,7 +89,7 @@ yumi-licenseguard = { git = "https://github.com/simplyYouma/yumi-licenseguard.gi
 
 ### Edit 3 — `src-tauri/src/lib.rs`
 
-Register the six shared Tauri commands inside `tauri::generate_handler!`:
+Register the eight shared Tauri commands inside `tauri::generate_handler!`:
 
 ```rust
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -104,12 +104,22 @@ pub fn run() {
             yumi_licenseguard::commands::save_license_key,
             yumi_licenseguard::commands::get_secure_storage,
             yumi_licenseguard::commands::set_secure_storage,
+            // Auto-update Android (v2.6.0+) — no-op explicite sur desktop
+            yumi_licenseguard::commands::get_updater_endpoint,
+            yumi_licenseguard::commands::download_and_install_apk,
             // Your project-specific commands below
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
 ```
+
+**Android auto-update (v2.6.0+)** : `tauri-plugin-updater` étant desktop-only,
+le flux APK (manifeste Hub → téléchargement → vérification minisign → installeur
+système) est porté par le crate. Prérequis dans `gen/android`, appliqués par
+`POS_Tauri/tools/apply-android-recipe.mjs` après chaque `android:init` :
+permission `REQUEST_INSTALL_PACKAGES`, FileProvider `<applicationId>.yumiupdate`
+(cache-path `updates/`), dépendance `androidx.core:core-ktx`.
 
 The `commands::` submodule prefix matters — Rust requires `#[tauri::command]` items to live in a module when the crate is consumed as a library.
 

@@ -1,6 +1,6 @@
 [package]
 name         = "yumi-licenseguard"
-version      = "2.5.2"
+version      = "2.6.0"
 edition      = "2024"
 rust-version = "1.85"
 description  = "Shared LicenseGuard backend for Yumi POS Tauri apps — HWID, Ed25519 verification, and tamper-resistant secure storage. Cross-platform : Windows, Linux, macOS, Android, iOS."
@@ -15,7 +15,23 @@ tauri          = { version = "2.10.3" }
 ed25519-dalek  = { version = "2.1.1", features = ["serde"] }
 hex            = "0.4.3"
 serde          = { version = "1.0", features = ["derive"] }
+serde_json     = "1"
 # uuid : génération d'un identifiant d'installation pour les plateformes
 # où aucun HWID stable n'est exposé sans permissions sensibles
 # (Android sandbox, iOS). Persistant dans app_data_dir.
 uuid           = { version = "1", features = ["v4"] }
+
+# Auto-update Android (tauri-plugin-updater est desktop-only) :
+# téléchargement APK + vérification minisign + installeur système via JNI.
+# minisign-verify est hors cfg(android) pour que la vérification de
+# signature soit compilable/testable aussi sur desktop.
+minisign-verify = "0.2"
+base64          = "0.22"
+
+[target.'cfg(target_os = "android")'.dependencies]
+# reqwest : même version/feature-set que tauri-plugin-http (déjà dans
+# l'arbre de tous les POS) → dédupliqué par cargo.
+# jni 0.21 : DOIT suivre la version utilisée par wry (les types JNIEnv/JObject
+# traversent la frontière jni_handle().exec).
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+jni     = "0.21"

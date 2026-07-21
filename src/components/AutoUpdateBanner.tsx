@@ -24,8 +24,10 @@ export function AutoUpdateBanner() {
         setFailed(false);
         try {
             await update.install(); // download + vérif signature + relance
-        } catch {
-            // Échec (réseau, signature) : on laisse réessayer plus tard.
+        } catch (e) {
+            // Échec (réseau, signature) : on loggue la cause exacte (support)
+            // et on laisse réessayer.
+            console.error('[AutoUpdateBanner] install failed:', e);
             setInstalling(false);
             setFailed(true);
         }
@@ -35,7 +37,15 @@ export function AutoUpdateBanner() {
         <div style={{
             position: 'fixed', left: 0, right: 0, bottom: 0,
             zIndex: 2147483000, display: 'flex', justifyContent: 'center',
-            padding: 14, pointerEvents: 'none',
+            // Respecte la barre de navigation gestuelle Android / l'encoche iOS :
+            // sans ce dégagement, la bannière passe SOUS la barre système et le
+            // bouton « Installer » devient intouchable (vérifié sur tablette).
+            // `max()` garantit un minimum de 56px même quand le WebView ne
+            // renseigne pas env() (pas de viewport-fit=cover → env() vaut 0,
+            // donc le fallback d'env() ne suffit pas — il faut un plancher).
+            padding: 14,
+            paddingBottom: 'max(56px, calc(14px + env(safe-area-inset-bottom)))',
+            pointerEvents: 'none',
         }}>
             <div style={{
                 pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 12,
