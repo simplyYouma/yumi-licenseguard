@@ -56,6 +56,16 @@ export function useUpdater(opts: UseUpdaterOptions = {}): UseUpdaterResult {
         // Hors Tauri (web preview / SSR) : on ne fait rien.
         if (!('__TAURI_INTERNALS__' in window)) return;
 
+        // Android : tauri-plugin-updater compile mais son install() est un
+        // no-op sur mobile (support officiel = "none") — la bannière
+        // proposerait une installation factice. On désactive jusqu'à
+        // l'implémentation du flux APK natif (téléchargement + intent
+        // PackageInstaller). Les tablettes restent mises à jour par APK.
+        if (/android/i.test(navigator.userAgent)) {
+            console.info('[useUpdater] Android : auto-update natif non supporté par tauri-plugin-updater — check ignoré.');
+            return;
+        }
+
         setIsChecking(true);
         setError(null);
         try {
