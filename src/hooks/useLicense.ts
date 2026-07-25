@@ -22,6 +22,23 @@ function clamp(n: number, lo: number, hi: number): number {
     return Math.max(lo, Math.min(hi, n));
 }
 
+/**
+ * Version courante de l'app (package/tauri.conf), remontée au Hub à chaque
+ * verify pour afficher côté admin « quelle version chaque client possède » +
+ * un badge à jour/obsolète. Mise en cache (elle ne change pas en cours de run).
+ */
+let cachedAppVersion: string | null = null;
+async function getAppVersion(): Promise<string | null> {
+    if (cachedAppVersion) return cachedAppVersion;
+    try {
+        const { getVersion } = await import('@tauri-apps/api/app');
+        cachedAppVersion = await getVersion();
+    } catch {
+        cachedAppVersion = null;
+    }
+    return cachedAppVersion;
+}
+
 export function useLicense() {
     const [state, setState] = useState<LicenseState>({
         isLicensed: null,
@@ -69,7 +86,7 @@ export function useLicense() {
                 res = await fetch(YUMI_HUB_API, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ hwid, project_id: YUMI_PROJECT_ID }),
+                    body: JSON.stringify({ hwid, project_id: YUMI_PROJECT_ID, app_version: await getAppVersion() }),
                     cache: 'no-store',
                     signal: abort.signal
                 });
