@@ -4,7 +4,8 @@ import { useUpdater } from '../hooks/useUpdater';
 /**
  * Bannière d'auto-mise à jour — rendue par LicenseGuard pour TOUS les POS.
  *
- * Au démarrage (et toutes les 6 h), `useUpdater` vérifie le Hub. Si une
+ * Au démarrage, toutes les ~3 min et à chaque retour au premier plan,
+ * `useUpdater` vérifie le Hub. Si une
  * version supérieure est publiée, cette bannière apparaît en bas de l'écran
  * avec un bouton « Installer » qui télécharge, vérifie la signature et
  * redémarre l'app (desktop) / lance l'installeur APK (Android).

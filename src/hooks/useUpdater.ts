@@ -4,7 +4,11 @@ import { useEffect, useState, useCallback, useRef } from 'react';
  * Hook auto-updater — invoque tauri-plugin-updater au démarrage.
  *
  *   - Au mount : check une fois si une nouvelle version est dispo
- *   - Re-check toutes les `intervalMs` (défaut 6 h) pour les sessions longues
+ *   - Re-check toutes les `intervalMs` (défaut 3 min) — quasi temps réel pour
+ *     un POS resté ouvert toute la journée
+ *   - Re-check DÈS QUE l'app revient au premier plan (focus / visibilité) :
+ *     un release publié pendant que l'écran dormait est détecté au réveil,
+ *     sans attendre le prochain tick (anti-rafale de 15 s entre deux checks)
  *   - Web preview : pass-through silencieux (pas de Tauri dispo)
  *
  * Le hook ne déclenche PAS le download automatiquement — il expose l'objet
@@ -43,7 +47,9 @@ interface UseUpdaterResult {
     error: string | null;
 }
 
-const DEFAULT_INTERVAL = 6 * 60 * 60 * 1000; // 6 h
+const DEFAULT_INTERVAL = 3 * 60 * 1000; // 3 min — quasi temps réel sur un POS ouvert
+/** Écart minimal entre deux checks déclenchés par le focus (anti-rafale). */
+const FOREGROUND_MIN_GAP = 15 * 1000;
 
 /** Compare deux versions SemVer numériques. true si `candidate` > `current`. */
 export function isNewerVersion(candidate: string, current: string): boolean {
@@ -166,10 +172,17 @@ export function useUpdater(opts: UseUpdaterOptions = {}): UseUpdaterResult {
     useEffect(() => {
         if (!enabled) return;
         let cancelled = false;
+        let lastRun = 0;
+
+        const run = async () => {
+            if (cancelled) return;
+            lastRun = Date.now();
+            await checkNow();
+        };
 
         const tick = async () => {
             if (cancelled) return;
-            await checkNow();
+            await run();
             if (cancelled) return;
             timerRef.current = setTimeout(tick, intervalMs);
         };
@@ -177,9 +190,30 @@ export function useUpdater(opts: UseUpdaterOptions = {}): UseUpdaterResult {
         // finir son boot (licence, splash, etc.) avant le hit réseau.
         timerRef.current = setTimeout(tick, 5000);
 
+        // Retour au premier plan → check immédiat (anti-rafale) : un release
+        // publié pendant que l'écran dormait est vu au réveil de l'app.
+        const onForeground = () => {
+            if (cancelled) return;
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+            if (Date.now() - lastRun < FOREGROUND_MIN_GAP) return;
+            void run();
+        };
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', onForeground);
+        }
+        if (typeof window !== 'undefined') {
+            window.addEventListener('focus', onForeground);
+        }
+
         return () => {
             cancelled = true;
             if (timerRef.current) clearTimeout(timerRef.current);
+            if (typeof document !== 'undefined') {
+                document.removeEventListener('visibilitychange', onForeground);
+            }
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('focus', onForeground);
+            }
         };
     }, [enabled, intervalMs, checkNow]);
 
