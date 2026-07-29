@@ -27,10 +27,15 @@ export type { LicenseState, Notification } from './types';
 
 // Auto-updater hook — host apps wire it once at App.tsx mount.
 export { useUpdater } from './hooks/useUpdater';
+export type { AvailableUpdate, InstallProgress } from './hooks/useUpdater';
 // Drop-in button for the Settings page : check + install in one widget.
 export { UpdateCheckButton } from './components/UpdateCheckButton';
 // Bannière auto-update — rendue automatiquement par LicenseGuard (tous les POS).
 export { AutoUpdateBanner } from './components/AutoUpdateBanner';
+// Overlay d'installation bloquant (progression %, erreurs, annulation).
+export { InstallOverlay } from './components/InstallOverlay';
+// Panneau Réglages : badge abonnement + version + mise à jour + machine id.
+export { LicensePanel } from './components/LicensePanel';
 
 interface LicenseGuardProps {
     children: React.ReactNode;

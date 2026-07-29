@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useUpdater } from '../hooks/useUpdater';
+import { InstallOverlay } from './InstallOverlay';
 
 /**
  * Bouton autonome pour vérifier/installer les mises à jour. À glisser dans
@@ -54,17 +55,11 @@ export function UpdateCheckButton({ className = '', onUpdateAvailable, onUpToDat
         }
     }
 
-    async function handleInstall() {
+    // L'installation passe par l'OVERLAY BLOQUANT partagé (progression %,
+    // activité gelée, erreurs affichées, annulation pendant le téléchargement).
+    function handleInstall() {
         if (!update) return;
         setInstallState('installing');
-        try {
-            await update.install();
-            // downloadAndInstall trigger un restart natif — si on revient ici
-            // c'est que ça a échoué (ou que Tauri a abandonné silencieusement).
-        } catch (e) {
-            console.error('[UpdateCheckButton] install failed:', e);
-            setInstallState('idle');
-        }
     }
 
     const baseStyle: React.CSSProperties = {
@@ -84,12 +79,8 @@ export function UpdateCheckButton({ className = '', onUpdateAvailable, onUpToDat
         gap: 8,
     };
 
-    if (installState === 'installing') {
-        return (
-            <button type="button" disabled className={className} style={{ ...baseStyle, opacity: 0.6, cursor: 'wait' }}>
-                Installation… L'app va redémarrer
-            </button>
-        );
+    if (installState === 'installing' && update) {
+        return <InstallOverlay update={update} onClose={() => setInstallState('idle')} />;
     }
 
     if (update) {

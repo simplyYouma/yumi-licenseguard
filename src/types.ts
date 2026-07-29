@@ -15,4 +15,7 @@ export interface LicenseState {
     isSyncWarning: boolean;
     isSyncRequired: boolean;
     lastSyncDate: number | null;
+    /** Fin de l'abonnement (ISO) — Hub `expiresAt`, sinon dérivée de la clé
+        locale (partie hex avant le point). null si inconnue. */
+    expiresAt: string | null;
 }

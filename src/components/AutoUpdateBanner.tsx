@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useUpdater } from '../hooks/useUpdater';
+import { InstallOverlay } from './InstallOverlay';
 
 /**
  * Bannière d'auto-mise à jour — rendue par LicenseGuard pour TOUS les POS.
@@ -15,24 +16,16 @@ import { useUpdater } from '../hooks/useUpdater';
 export function AutoUpdateBanner() {
     const { update } = useUpdater();
     const [installing, setInstalling] = useState(false);
-    const [failed, setFailed] = useState(false);
     const [dismissed, setDismissed] = useState(false);
 
     if (!update || dismissed) return null;
 
-    const install = async () => {
-        setInstalling(true);
-        setFailed(false);
-        try {
-            await update.install(); // download + vérif signature + relance
-        } catch (e) {
-            // Échec (réseau, signature) : on loggue la cause exacte (support)
-            // et on laisse réessayer.
-            console.error('[AutoUpdateBanner] install failed:', e);
-            setInstalling(false);
-            setFailed(true);
-        }
-    };
+    // L'installation vit dans l'OVERLAY BLOQUANT partagé : progression en %,
+    // activité gelée le temps de l'install, erreurs affichées (jamais figé),
+    // annulation possible pendant le téléchargement (Android).
+    if (installing) {
+        return <InstallOverlay update={update} onClose={() => setInstalling(false)} />;
+    }
 
     return (
         <div style={{
@@ -61,12 +54,10 @@ export function AutoUpdateBanner() {
                         Mise à jour disponible — v{update.version}
                     </p>
                     <p style={{ margin: 0, fontSize: 11, opacity: 0.7 }}>
-                        {failed
-                            ? 'Échec — réessaie (vérifie ta connexion).'
-                            : 'Installe la dernière version (corrections & nouveautés).'}
+                        Installe la dernière version (corrections & nouveautés).
                     </p>
                 </div>
-                <button onClick={() => setDismissed(true)} disabled={installing}
+                <button onClick={() => setDismissed(true)}
                     style={{
                         background: 'transparent', color: 'rgba(255,255,255,0.7)',
                         border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700,
@@ -74,14 +65,14 @@ export function AutoUpdateBanner() {
                     }}>
                     Plus tard
                 </button>
-                <button onClick={() => void install()} disabled={installing}
+                <button onClick={() => setInstalling(true)}
                     style={{
                         background: '#fff', color: '#1C1917',
-                        border: 'none', cursor: installing ? 'default' : 'pointer',
+                        border: 'none', cursor: 'pointer',
                         fontSize: 12, fontWeight: 800, padding: '9px 16px', borderRadius: 9999,
-                        opacity: installing ? 0.6 : 1, whiteSpace: 'nowrap',
+                        whiteSpace: 'nowrap',
                     }}>
-                    {installing ? 'Installation…' : 'Installer'}
+                    Installer
                 </button>
             </div>
         </div>

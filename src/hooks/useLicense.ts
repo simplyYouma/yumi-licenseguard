@@ -49,6 +49,7 @@ export function useLicense() {
         isSyncWarning: false,
         isSyncRequired: false,
         lastSyncDate: null,
+        expiresAt: null,
     });
 
     const [activeNotif, setActiveNotif] = useState<Notification | null>(null);
@@ -126,7 +127,9 @@ export function useLicense() {
                     isExpired: false,
                     isLicensed: true,
                     isSyncRequired: false,
-                    isSyncWarning: false
+                    isSyncWarning: false,
+                    // Fin d'abonnement — source de vérité Hub (badge Réglages).
+                    expiresAt: typeof data.expiresAt === 'string' ? data.expiresAt : prev.expiresAt,
                 }));
 
                 // --- Cadence pilotée par le Hub (depuis v2.3.0) ---
@@ -280,6 +283,11 @@ export function useLicense() {
 
                 if (parts.length === 2) {
                     const expiry = parseInt(parts[0], 16);
+                    // Fin d'abonnement dérivée de la clé locale — disponible
+                    // hors-ligne, écrasée par la valeur Hub au premier verify.
+                    if (Number.isFinite(expiry) && expiry > 0) {
+                        setState(prev => ({ ...prev, expiresAt: new Date(expiry).toISOString() }));
+                    }
                     if (now > expiry) {
                         // La clé LOCALE paraît expirée — mais l'admin a peut-être
                         // renouvelé côté Hub (la BDD est la source de vérité, et la

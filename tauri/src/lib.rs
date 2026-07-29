@@ -388,6 +388,30 @@ pub mod commands {
         Err("download_and_install_apk n'est disponible que sur Android — utiliser tauri-plugin-updater sur desktop.".into())
     }
 
+    /// Drapeau d'annulation du téléchargement APK en cours — armé par la
+    /// commande `cancel_apk_download` (bouton « Annuler » de l'overlay
+    /// d'installation), consulté entre chaque chunk du stream.
+    #[cfg(target_os = "android")]
+    static APK_CANCEL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+    /// Annule le téléchargement APK en cours (no-op s'il n'y en a pas).
+    #[tauri::command]
+    pub fn cancel_apk_download() {
+        #[cfg(target_os = "android")]
+        APK_CANCEL.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Payload des événements de progression émis pendant l'installation :
+    /// `yumi-update-progress` { phase, downloaded, total } —
+    /// phase ∈ download | verify | install.
+    #[cfg(target_os = "android")]
+    #[derive(Clone, serde::Serialize)]
+    struct UpdateProgress {
+        phase: &'static str,
+        downloaded: u64,
+        total: Option<u64>,
+    }
+
     #[cfg(target_os = "android")]
     #[tauri::command]
     pub async fn download_and_install_apk(
@@ -395,20 +419,51 @@ pub mod commands {
         url: String,
         signature: String,
     ) -> Result<(), String> {
-        // 1. Téléchargement (reqwest natif — non soumis à la politique
-        //    cleartext du WebView ; le Hub est en HTTPS de toute façon).
+        use std::sync::atomic::Ordering;
+        use tauri::Emitter;
+        APK_CANCEL.store(false, Ordering::SeqCst);
+        let emit = |phase: &'static str, downloaded: u64, total: Option<u64>| {
+            let _ = app.emit("yumi-update-progress", UpdateProgress { phase, downloaded, total });
+        };
+
+        // 1. Téléchargement STREAMÉ (reqwest natif — non soumis à la politique
+        //    cleartext du WebView) : progression émise chunk par chunk vers
+        //    l'overlay d'installation, annulable entre deux chunks.
         eprintln!("[yumi-updater] téléchargement : {url}");
-        let response = reqwest::get(&url)
+        let mut response = reqwest::get(&url)
             .await
             .map_err(|e| format!("téléchargement APK impossible : {e}"))?;
         if !response.status().is_success() {
             return Err(format!("téléchargement APK : HTTP {}", response.status()));
         }
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|e| format!("lecture APK interrompue : {e}"))?;
+        let total = response.content_length();
+        emit("download", 0, total);
+        let mut bytes: Vec<u8> = Vec::with_capacity(total.unwrap_or(0) as usize);
+        {
+            let mut last_emit = std::time::Instant::now();
+            while let Some(chunk) = response
+                .chunk()
+                .await
+                .map_err(|e| format!("lecture APK interrompue : {e}"))?
+            {
+                if APK_CANCEL.load(Ordering::SeqCst) {
+                    return Err("Installation annulée".into());
+                }
+                bytes.extend_from_slice(&chunk);
+                // Throttle : un événement max toutes les ~120 ms suffit pour
+                // une barre fluide sans inonder le pont IPC.
+                if last_emit.elapsed().as_millis() >= 120 {
+                    emit("download", bytes.len() as u64, total);
+                    last_emit = std::time::Instant::now();
+                }
+            }
+        }
+        emit("download", bytes.len() as u64, total.or(Some(bytes.len() as u64)));
         eprintln!("[yumi-updater] téléchargé : {} octets", bytes.len());
+        if APK_CANCEL.load(Ordering::SeqCst) {
+            return Err("Installation annulée".into());
+        }
+        emit("verify", bytes.len() as u64, total);
 
         // 2. Vérification minisign avec la pubkey updater du POS.
         let config = app.config();
@@ -444,6 +499,7 @@ pub mod commands {
         //    (ndk-context n'est PAS initialisé par tao/wry dans Tauri 2.)
         let path_str = apk_path.to_string_lossy().to_string();
         eprintln!("[yumi-updater] APK écrit : {path_str} — ouverture session PackageInstaller");
+        emit("install", bytes.len() as u64, total);
 
         let webview = app
             .webview_windows()

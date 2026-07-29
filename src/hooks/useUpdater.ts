@@ -23,12 +23,26 @@ import { useEffect, useState, useCallback, useRef } from 'react';
  * tick suivant.
  */
 
-interface AvailableUpdate {
+/** Progression d'une installation en cours (overlay bloquant). */
+export interface InstallProgress {
+    /** download = téléchargement ; verify = signature ; install = installeur. */
+    phase: 'download' | 'verify' | 'install';
+    /** 0..100, ou null si la taille totale est inconnue. */
+    percent: number | null;
+    downloadedBytes: number;
+    totalBytes: number | null;
+}
+
+export interface AvailableUpdate {
     version: string;
     notes: string | null;
     date: string | null;
-    /** Télécharge + installe l'update + redémarre l'app. */
-    install: () => Promise<void>;
+    /** Télécharge + installe l'update + redémarre l'app.
+        `onProgress` alimente l'overlay d'installation (phase + %). */
+    install: (onProgress?: (p: InstallProgress) => void) => Promise<void>;
+    /** Annule le téléchargement en cours (Android uniquement — le flux
+        desktop de tauri-plugin-updater n'est pas interruptible). */
+    cancel: (() => Promise<void>) | null;
 }
 
 interface UseUpdaterOptions {
@@ -93,13 +107,37 @@ async function checkAndroid(): Promise<AvailableUpdate | null> {
         version: manifest.version,
         notes: manifest.notes ?? null,
         date: manifest.pub_date ?? null,
-        install: async () => {
-            // Rust télécharge, vérifie la signature minisign et ouvre
-            // l'installeur système — Android gère la confirmation.
-            await invoke('download_and_install_apk', {
-                url: manifest.url,
-                signature: manifest.signature,
-            });
+        install: async (onProgress) => {
+            // Rust télécharge (streamé, événements de progression), vérifie la
+            // signature minisign et ouvre l'installeur système — Android gère
+            // la confirmation.
+            const { listen } = await import('@tauri-apps/api/event');
+            const unlisten = onProgress
+                ? await listen<{ phase: 'download' | 'verify' | 'install'; downloaded: number; total: number | null }>(
+                    'yumi-update-progress',
+                    (e) => {
+                        const { phase, downloaded, total } = e.payload;
+                        onProgress({
+                            phase,
+                            percent: total ? Math.min(100, Math.round((downloaded / total) * 100)) : null,
+                            downloadedBytes: downloaded,
+                            totalBytes: total,
+                        });
+                    },
+                )
+                : null;
+            try {
+                await invoke('download_and_install_apk', {
+                    url: manifest.url,
+                    signature: manifest.signature,
+                });
+            } finally {
+                unlisten?.();
+            }
+        },
+        cancel: async () => {
+            const { invoke: inv } = await import('@tauri-apps/api/core');
+            await inv('cancel_apk_download');
         },
     };
 }
@@ -151,11 +189,36 @@ export function useUpdater(opts: UseUpdaterOptions = {}): UseUpdaterResult {
                 version: result.version,
                 notes: result.body ?? null,
                 date: result.date ?? null,
-                install: async () => {
+                install: async (onProgress) => {
                     // Tauri downloadAndInstall télécharge le binaire, vérifie
                     // la signature avec la pubkey embarquée, et redémarre.
-                    await result.downloadAndInstall();
+                    // Ses événements natifs alimentent la même progression
+                    // que le flux Android.
+                    let total: number | null = null;
+                    let downloaded = 0;
+                    await result.downloadAndInstall((event: {
+                        event: 'Started' | 'Progress' | 'Finished';
+                        data?: { contentLength?: number; chunkLength?: number };
+                    }) => {
+                        if (!onProgress) return;
+                        if (event.event === 'Started') {
+                            total = event.data?.contentLength ?? null;
+                            onProgress({ phase: 'download', percent: total ? 0 : null, downloadedBytes: 0, totalBytes: total });
+                        } else if (event.event === 'Progress') {
+                            downloaded += event.data?.chunkLength ?? 0;
+                            onProgress({
+                                phase: 'download',
+                                percent: total ? Math.min(100, Math.round((downloaded / total) * 100)) : null,
+                                downloadedBytes: downloaded,
+                                totalBytes: total,
+                            });
+                        } else {
+                            onProgress({ phase: 'install', percent: 100, downloadedBytes: downloaded, totalBytes: total });
+                        }
+                    });
                 },
+                // Le plugin desktop n'expose pas d'interruption.
+                cancel: null,
             });
         } catch (e) {
             // Updater pas configuré, pas d'internet, signature invalide :
