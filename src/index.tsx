@@ -36,6 +36,10 @@ export { AutoUpdateBanner } from './components/AutoUpdateBanner';
 export { InstallOverlay } from './components/InstallOverlay';
 // Panneau Réglages : badge abonnement + version + mise à jour + machine id.
 export { LicensePanel } from './components/LicensePanel';
+// Page « À propos » complète (version, abonnement, conformité, machine, synchro).
+export { AboutPanel } from './components/AboutPanel';
+// Signature d'acceptation du contrat (nom complet, stockage sécurisé).
+export { LicenseSignature } from './components/LicenseSignature';
 
 interface LicenseGuardProps {
     children: React.ReactNode;
