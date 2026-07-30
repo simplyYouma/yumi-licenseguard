@@ -1,17 +1,24 @@
 import { useEffect, useState } from 'react';
+import { Mail, Phone, Cpu, KeyRound, Cloud, RefreshCw, CalendarClock, BadgeCheck, PenLine, Package } from 'lucide-react';
 import { useUpdater } from '../hooks/useUpdater';
 import { InstallOverlay } from './InstallOverlay';
 
 /**
- * « À PROPOS » — page d'état PRO, partagée par tous les POS.
+ * « À PROPOS » — LA page d'état du poste, partagée par tous les POS.
  *
- * Une lecture calme et structurée de tout ce qui compte : version et mise à
- * jour, abonnement et prochaine expiration, conformité (signature du
- * contrat), identité machine (ID, clé masquée), dernière synchronisation.
+ * Contenu (zéro répétition avec la page Contrat, qui ne garde que le texte
+ * du contrat + la signature) :
+ *   1. ÉDITEUR & SUPPORT — carte sombre éditoriale (nom en lettrine serif,
+ *      e-mail, ligne directe) ;
+ *   2. VERSION & MISE À JOUR — version installée, état, bouton Installer
+ *      (→ overlay bloquant avec progression) ;
+ *   3. ABONNEMENT — badge statique + prochaine échéance ;
+ *   4. CONFORMITÉ — validité contractuelle + signature d'acceptation ;
+ *   5. POSTE & LICENCE — identifiant machine, clé masquée (copiables),
+ *      dernière synchronisation + bouton « Revérifier » (Hub).
  *
- * Règles visuelles : AUCUNE animation d'état — les statuts sont des pastilles
- * STATIQUES colorées avec libellé (charte Yumi : la sobriété est une
- * maturité). Tout hérite des tokens du POS hôte.
+ * Charte : pastilles d'état STATIQUES (jamais d'animation), micro-labels
+ * uppercase, hairlines, tokens du POS hôte (fallbacks neutres).
  */
 
 const DAY = 86_400_000;
@@ -49,119 +56,197 @@ const fmtRelative = (ms: number): string => {
 };
 
 interface Props {
-    /** Nom commercial de l'app (ex. « BOUTIKII ») — affiché en tête. */
+    /** Nom commercial de l'app (ex. « BOUTIKII »). */
     appName?: string;
+    /** Éditeur — défauts : l'éditeur Yumi. */
+    editorName?: string;
+    editorEmail?: string;
+    editorPhone?: string;
     className?: string;
-    /** Notifie le POS hôte (toast maison) après une copie presse-papier. */
-    onCopied?: (label: string) => void;
+    /** Toast maison du POS après une copie presse-papier / une resynchro. */
+    onNotify?: (message: string, ok: boolean) => void;
 }
 
-export function AboutPanel({ appName, className = '', onCopied }: Props) {
+export function AboutPanel({
+    appName,
+    editorName = 'Fatoumata Youma Sokona',
+    editorEmail = 'fysokona@gmail.com',
+    editorPhone = '+223 90 04 13 69',
+    className = '',
+    onNotify,
+}: Props) {
     const [data, setData] = useState<AboutData | null>(null);
     const { update, isChecking, checkNow, error } = useUpdater({ enabled: false });
     const [installing, setInstalling] = useState(false);
     const [checked, setChecked] = useState(false);
+    const [resyncing, setResyncing] = useState(false);
+
+    const load = async () => {
+        if (!('__TAURI_INTERNALS__' in window)) {
+            setData({ version: '', machineId: '—', licenseKey: '', expiryMs: null, lastSyncMs: null, signedName: null, signedDate: null });
+            return;
+        }
+        const { invoke } = await import('@tauri-apps/api/core');
+        const { getVersion } = await import('@tauri-apps/api/app');
+        const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
+            try { return await p; } catch { return fallback; }
+        };
+        const [version, machineId, licenseKey, lastSyncRaw, signedName, signedDate] = await Promise.all([
+            safe(getVersion(), ''),
+            safe(invoke<string>('get_machine_id'), '—'),
+            safe(invoke<string>('get_license_key'), ''),
+            safe(invoke<string>('get_secure_storage', { key: 'last_sync' }), ''),
+            safe(invoke<string>('get_secure_storage', { key: 'license_signature_name' }), ''),
+            safe(invoke<string>('get_secure_storage', { key: 'license_signature_date' }), ''),
+        ]);
+        const lastSyncMs = Number(lastSyncRaw);
+        setData({
+            version,
+            machineId: (machineId || '—').trim().toUpperCase(),
+            licenseKey: licenseKey ?? '',
+            expiryMs: licenseKey ? readExpiryFromKey(licenseKey) : null,
+            lastSyncMs: Number.isFinite(lastSyncMs) && lastSyncMs > 0 ? lastSyncMs : null,
+            signedName: signedName || null,
+            signedDate: signedDate || null,
+        });
+    };
 
     useEffect(() => {
-        void (async () => {
-            if (!('__TAURI_INTERNALS__' in window)) {
-                setData({ version: '', machineId: '—', licenseKey: '', expiryMs: null, lastSyncMs: null, signedName: null, signedDate: null });
-                return;
-            }
-            const { invoke } = await import('@tauri-apps/api/core');
-            const { getVersion } = await import('@tauri-apps/api/app');
-            const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
-                try { return await p; } catch { return fallback; }
-            };
-            const [version, machineId, licenseKey, lastSyncRaw, signedName, signedDate] = await Promise.all([
-                safe(getVersion(), ''),
-                safe(invoke<string>('get_machine_id'), '—'),
-                safe(invoke<string>('get_license_key'), ''),
-                safe(invoke<string>('get_secure_storage', { key: 'last_sync' }), ''),
-                safe(invoke<string>('get_secure_storage', { key: 'license_signature_name' }), ''),
-                safe(invoke<string>('get_secure_storage', { key: 'license_signature_date' }), ''),
-            ]);
-            const lastSyncMs = Number(lastSyncRaw);
-            setData({
-                version,
-                machineId: (machineId || '—').trim().toUpperCase(),
-                licenseKey: licenseKey ?? '',
-                expiryMs: licenseKey ? readExpiryFromKey(licenseKey) : null,
-                lastSyncMs: Number.isFinite(lastSyncMs) && lastSyncMs > 0 ? lastSyncMs : null,
-                signedName: signedName || null,
-                signedDate: signedDate || null,
-            });
-        })();
+        void load();
         void checkNow().then(() => setChecked(true));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    /** Revérification licence auprès du Hub (même flux que verifyWithHub). */
+    const resync = async () => {
+        if (resyncing || !data) return;
+        setResyncing(true);
+        try {
+            const hubUrl: string = import.meta.env.VITE_YUMI_HUB_URL ?? '';
+            const projectId: string = (import.meta.env.VITE_YUMI_PROJECT_ID ?? '').replace(/"/g, '');
+            if (!hubUrl || !projectId || data.machineId === '—') {
+                onNotify?.('Configuration Hub incomplète', false);
+                return;
+            }
+            const res = await fetch(hubUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ hwid: data.machineId, project_id: projectId }),
+                cache: 'no-store',
+                signal: AbortSignal.timeout(15000),
+            });
+            if (res.ok) {
+                const { invoke } = await import('@tauri-apps/api/core');
+                await invoke('set_secure_storage', { key: 'last_sync', value: String(Date.now()) });
+                onNotify?.('Licence revérifiée auprès du Hub', true);
+                await load();
+            } else {
+                onNotify?.(`Le Hub a répondu ${res.status}`, false);
+            }
+        } catch (e) {
+            onNotify?.(`Hub injoignable : ${(e as Error).message}`, false);
+        } finally {
+            setResyncing(false);
+        }
+    };
 
     if (!data) return null;
 
     const daysLeft = data.expiryMs != null ? Math.ceil((data.expiryMs - Date.now()) / DAY) : null;
     const subscription = data.expiryMs == null
-        ? { label: 'Abonnement actif', tone: '#4ade80', detail: 'Sans échéance enregistrée localement' }
+        ? { label: 'Actif', tone: '#4ade80', detail: 'Sans échéance enregistrée localement' }
         : daysLeft != null && daysLeft <= 0
-            ? { label: 'Abonnement expiré', tone: '#f87171', detail: `Échu le ${fmtDate(data.expiryMs)}` }
+            ? { label: 'Expiré', tone: '#f87171', detail: `Échu le ${fmtDate(data.expiryMs)}` }
             : daysLeft != null && daysLeft <= 15
-                ? { label: `Expire dans ${daysLeft} jour${daysLeft > 1 ? 's' : ''}`, tone: '#fbbf24', detail: `Prochaine échéance : ${fmtDate(data.expiryMs)}` }
-                : { label: 'Abonnement actif', tone: '#4ade80', detail: `Prochaine échéance : ${fmtDate(data.expiryMs)}` };
+                ? { label: `${daysLeft} j restants`, tone: '#fbbf24', detail: `Prochaine échéance : ${fmtDate(data.expiryMs)}` }
+                : { label: 'Actif', tone: '#4ade80', detail: `Prochaine échéance : ${fmtDate(data.expiryMs)}` };
 
-    const conform = data.signedName
-        ? { label: 'Contrat accepté', tone: '#4ade80', detail: `Signé par ${data.signedName}${data.signedDate ? ` le ${fmtDate(new Date(data.signedDate).getTime())}` : ''}` }
-        : { label: 'Contrat non signé', tone: '#fbbf24', detail: "L'usage vaut acceptation — la signature reste recommandée (page Licence)" };
+    const conforme = subscription.tone !== '#f87171';
 
     const copy = (label: string, value: string) => {
         if (!value || value === '—') return;
         void navigator.clipboard?.writeText(value);
-        onCopied?.(label);
+        onNotify?.(`${label} copié`, true);
     };
 
-    // ── Primitives locales (héritent des tokens du POS hôte). ──
+    // ── Primitives visuelles ──
     const Dot = ({ tone }: { tone: string }) => (
         <span style={{ width: 8, height: 8, borderRadius: 9999, background: tone, display: 'inline-block', flexShrink: 0 }} />
     );
-    const sectionTitle: React.CSSProperties = {
-        margin: 0, fontSize: 10, fontWeight: 800,
-        letterSpacing: '0.22em', textTransform: 'uppercase', opacity: 0.45,
+    const micro: React.CSSProperties = {
+        margin: 0, fontSize: 9.5, fontWeight: 800,
+        letterSpacing: '0.24em', textTransform: 'uppercase', opacity: 0.45,
     };
     const card: React.CSSProperties = {
-        borderRadius: 18,
+        borderRadius: 20,
         border: '1px solid var(--lg-color-border, rgba(0,0,0,0.08))',
-        padding: '18px 20px',
-        display: 'flex', flexDirection: 'column', gap: 12,
+        background: 'var(--lg-color-card, transparent)',
+        padding: '20px 22px',
+        display: 'flex', flexDirection: 'column', gap: 10,
     };
-    const rowStyle: React.CSSProperties = {
-        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-        gap: 16, fontSize: 13,
+    const bigValue: React.CSSProperties = {
+        margin: 0, fontSize: 26, fontWeight: 800, letterSpacing: '-0.01em',
+        fontFamily: 'var(--font-display, inherit)',
+        fontVariantNumeric: 'tabular-nums',
     };
-    const kLabel: React.CSSProperties = { opacity: 0.55, fontWeight: 600, whiteSpace: 'nowrap' };
-    const kValue: React.CSSProperties = { fontWeight: 700, fontVariantNumeric: 'tabular-nums', textAlign: 'right' };
-    const mono: React.CSSProperties = { ...kValue, fontFamily: 'ui-monospace, monospace', fontSize: 11.5, opacity: 0.85, cursor: 'pointer' };
+    const detail: React.CSSProperties = { margin: 0, fontSize: 12, opacity: 0.55, lineHeight: 1.5 };
+    const ghostBtn: React.CSSProperties = {
+        height: 32, padding: '0 16px', borderRadius: 9999,
+        background: 'transparent', color: 'inherit',
+        border: '1px solid var(--lg-color-border, rgba(0,0,0,0.15))',
+        fontSize: 11, fontWeight: 700, cursor: 'pointer', opacity: 0.75,
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+    };
 
     return (
-        <div className={className} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className={className} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             {installing && update && (
                 <InstallOverlay update={update} onClose={() => setInstalling(false)} />
             )}
 
-            {/* ── Application & mise à jour ── */}
-            <div style={card}>
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-                    <p style={sectionTitle}>Application</p>
+            {/* ═══ 1. ÉDITEUR & SUPPORT — carte sombre éditoriale ═══ */}
+            <div style={{
+                background: '#0A0A0A', color: '#FFFFFF',
+                borderRadius: 24, padding: '28px 30px',
+                display: 'flex', flexWrap: 'wrap', gap: 26,
+                alignItems: 'flex-end', justifyContent: 'space-between',
+                boxShadow: '0 30px 70px -25px rgba(0,0,0,0.45)',
+            }}>
+                <div style={{ minWidth: 0 }}>
+                    <p style={{ ...micro, color: 'rgba(255,255,255,0.35)', opacity: 1 }}>
+                        Éditeur & support
+                    </p>
+                    <p style={{
+                        margin: '10px 0 0', fontSize: 30, lineHeight: 1.15,
+                        fontFamily: 'var(--font-display, Georgia, serif)', fontStyle: 'italic',
+                    }}>
+                        {editorName}
+                    </p>
                     {appName && (
-                        <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', opacity: 0.7 }}>{appName}</span>
+                        <p style={{ margin: '8px 0 0', fontSize: 10.5, fontWeight: 800, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>
+                            {appName} — Écosystème Yumi
+                        </p>
                     )}
                 </div>
-                <div style={rowStyle}>
-                    <span style={kLabel}>Version installée</span>
-                    <span style={{ ...kValue, fontSize: 18 }}>{data.version ? `v${data.version}` : '—'}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600 }}>
+                        <Mail size={13} strokeWidth={2.2} style={{ opacity: 0.5 }} /> {editorEmail}
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                        <Phone size={13} strokeWidth={2.2} style={{ opacity: 0.5 }} /> {editorPhone}
+                    </span>
                 </div>
-                <div style={rowStyle}>
-                    <span style={kLabel}>Mise à jour</span>
+            </div>
+
+            {/* ═══ 2-4. VERSION · ABONNEMENT · CONFORMITÉ ═══ */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 18 }}>
+                <div style={card}>
+                    <p style={micro}><Package size={10} strokeWidth={2.4} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 6 }} />Version</p>
+                    <p style={bigValue}>{data.version ? `v${data.version}` : '—'}</p>
                     {update ? (
                         <button type="button" onClick={() => setInstalling(true)}
                             style={{
+                                alignSelf: 'flex-start',
                                 height: 36, padding: '0 18px', borderRadius: 9999,
                                 background: 'var(--lg-color-bg, #1c1917)', color: 'var(--lg-color-fg, #fafaf9)',
                                 border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer',
@@ -169,66 +254,90 @@ export function AboutPanel({ appName, className = '', onCopied }: Props) {
                             v{update.version} disponible · Installer
                         </button>
                     ) : (
-                        <span style={{ ...kValue, display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                        <p style={{ ...detail, display: 'flex', alignItems: 'center', gap: 10 }}>
                             {isChecking ? 'Vérification…'
                                 : error && checked ? 'Vérification impossible'
-                                : checked ? 'À jour'
+                                : checked ? 'Vous êtes à jour'
                                 : '…'}
-                            <button type="button"
-                                onClick={() => { void checkNow().then(() => setChecked(true)); }}
-                                disabled={isChecking}
-                                style={{
-                                    height: 30, padding: '0 14px', borderRadius: 9999,
-                                    background: 'transparent', color: 'inherit',
-                                    border: '1px solid var(--lg-color-border, rgba(0,0,0,0.15))',
-                                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                                    opacity: isChecking ? 0.4 : 0.75,
-                                }}>
+                            <button type="button" style={ghostBtn} disabled={isChecking}
+                                onClick={() => { void checkNow().then(() => setChecked(true)); }}>
                                 Vérifier
                             </button>
-                        </span>
+                        </p>
                     )}
                 </div>
-            </div>
 
-            {/* ── Abonnement & conformité ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
                 <div style={card}>
-                    <p style={sectionTitle}>Abonnement</p>
-                    <p style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontWeight: 800, color: subscription.tone }}>
+                    <p style={micro}><CalendarClock size={10} strokeWidth={2.4} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 6 }} />Abonnement</p>
+                    <p style={{ ...bigValue, display: 'flex', alignItems: 'center', gap: 10, color: subscription.tone }}>
                         <Dot tone={subscription.tone} /> {subscription.label}
                     </p>
-                    <p style={{ margin: 0, fontSize: 12, opacity: 0.6, lineHeight: 1.5 }}>{subscription.detail}</p>
+                    <p style={detail}>{subscription.detail}</p>
                 </div>
+
                 <div style={card}>
-                    <p style={sectionTitle}>Conformité</p>
-                    <p style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontWeight: 800, color: conform.tone }}>
-                        <Dot tone={conform.tone} /> {conform.label}
+                    <p style={micro}><BadgeCheck size={10} strokeWidth={2.4} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 6 }} />Conformité</p>
+                    <p style={{ ...bigValue, display: 'flex', alignItems: 'center', gap: 10, color: conforme ? '#4ade80' : '#f87171' }}>
+                        <Dot tone={conforme ? '#4ade80' : '#f87171'} /> {conforme ? 'Conforme' : 'Action requise'}
                     </p>
-                    <p style={{ margin: 0, fontSize: 12, opacity: 0.6, lineHeight: 1.5 }}>{conform.detail}</p>
+                    <p style={{ ...detail, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <PenLine size={11} strokeWidth={2.2} style={{ opacity: 0.6, flexShrink: 0 }} />
+                        {data.signedName
+                            ? `Contrat signé par ${data.signedName}${data.signedDate ? ` le ${fmtDate(new Date(data.signedDate).getTime())}` : ''}`
+                            : 'Contrat non signé — signature recommandée (onglet Licence)'}
+                    </p>
                 </div>
             </div>
 
-            {/* ── Identité machine & synchronisation ── */}
-            <div style={card}>
-                <p style={sectionTitle}>Poste & licence</p>
-                <div style={rowStyle}>
-                    <span style={kLabel}>Identifiant machine</span>
-                    <span style={mono} title="Copier"
-                        onClick={() => copy('Identifiant machine', data.machineId)}>
-                        {data.machineId}
+            {/* ═══ 5. POSTE & LICENCE ═══ */}
+            <div style={{ ...card, gap: 0 }}>
+                <p style={{ ...micro, marginBottom: 6 }}>Poste & licence</p>
+                {[
+                    {
+                        icon: Cpu, label: 'Identifiant machine',
+                        value: data.machineId, copyable: data.machineId,
+                    },
+                    {
+                        icon: KeyRound, label: 'Clé de licence',
+                        value: data.licenseKey ? maskKey(data.licenseKey) : '—', copyable: data.licenseKey,
+                    },
+                ].map(({ icon: Icon, label, value, copyable }, i) => (
+                    <div key={label}
+                        style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            gap: 16, padding: '13px 0',
+                            borderTop: i > 0 ? '1px solid var(--lg-color-border, rgba(0,0,0,0.06))' : 'none',
+                        }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, opacity: 0.6 }}>
+                            <Icon size={13} strokeWidth={2.2} /> {label}
+                        </span>
+                        <span title="Copier"
+                            onClick={() => copy(label, copyable)}
+                            style={{
+                                fontFamily: 'ui-monospace, monospace', fontSize: 11.5,
+                                fontWeight: 700, opacity: 0.85, cursor: copyable ? 'pointer' : 'default',
+                                textAlign: 'right', wordBreak: 'break-all',
+                            }}>
+                            {value}
+                        </span>
+                    </div>
+                ))}
+                <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 16, padding: '13px 0 2px',
+                    borderTop: '1px solid var(--lg-color-border, rgba(0,0,0,0.06))',
+                }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, opacity: 0.6 }}>
+                        <Cloud size={13} strokeWidth={2.2} /> Dernière synchronisation
                     </span>
-                </div>
-                <div style={{ ...rowStyle, borderTop: '1px solid var(--lg-color-border, rgba(0,0,0,0.06))', paddingTop: 12 }}>
-                    <span style={kLabel}>Clé de licence</span>
-                    <span style={mono} title="Copier la clé complète"
-                        onClick={() => copy('Clé de licence', data.licenseKey)}>
-                        {data.licenseKey ? maskKey(data.licenseKey) : '—'}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 700 }}>
+                        {data.lastSyncMs ? fmtRelative(data.lastSyncMs) : 'Jamais'}
+                        <button type="button" style={ghostBtn} disabled={resyncing}
+                            onClick={() => void resync()}>
+                            <RefreshCw size={11} strokeWidth={2.4} />
+                            {resyncing ? 'Vérification…' : 'Revérifier'}
+                        </button>
                     </span>
-                </div>
-                <div style={{ ...rowStyle, borderTop: '1px solid var(--lg-color-border, rgba(0,0,0,0.06))', paddingTop: 12 }}>
-                    <span style={kLabel}>Dernière synchronisation</span>
-                    <span style={kValue}>{data.lastSyncMs ? fmtRelative(data.lastSyncMs) : 'Jamais'}</span>
                 </div>
             </div>
         </div>
