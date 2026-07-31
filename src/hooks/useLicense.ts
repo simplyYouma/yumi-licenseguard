@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { LicenseState, Notification } from '../types';
 import { guardTheme } from '../theme';
+import { oublierCapacites } from '../capacites';
 
 // ============================================================
 // CONFIGURATION HUB
@@ -143,6 +144,34 @@ export function useLicense() {
                 }
                 if (typeof data.warningDays === 'number') {
                     warningMinsRef.current = clamp(data.warningDays, 0, MAX_GRACE_DAYS) * 24 * 60;
+                }
+
+                // --- CAPACITÉS accordées par le Hub (depuis v2.13.0) ---
+                //
+                // Ce que ce client a le droit d'utiliser : multi-postes,
+                // boutique en ligne, pilotage à distance. Rien n'est actif
+                // par défaut — on déploie le même POS chez tout le monde, et
+                // l'option s'allume quand elle est vendue.
+                //
+                // Écrites dans le stockage sûr, PAS seulement en mémoire :
+                // au prochain démarrage hors ligne, une boutique doit
+                // retrouver l'option qu'elle a payée. Une panne de réseau ne
+                // reprend jamais ce qui est dû.
+                //
+                // Un Hub ancien ne renvoie pas ce champ : on ne touche alors
+                // à rien plutôt que d'effacer — une mise à jour du Hub ne
+                // doit pas couper les options le temps de son déploiement.
+                if (Array.isArray(data.capabilities)) {
+                    const propres = data.capabilities.filter(
+                        (c: unknown): c is string => typeof c === 'string',
+                    );
+                    await invoke('set_secure_storage', {
+                        key: 'capabilities',
+                        value: JSON.stringify(propres),
+                    }).catch(() => { /* le stockage sûr peut manquer : sans blocage */ });
+                    // Le cache mémoire doit oublier : une option accordée dans
+                    // le Hub arrive ainsi sans redémarrer l'application.
+                    oublierCapacites();
                 }
 
                 // --- Notifications Broadcast ---

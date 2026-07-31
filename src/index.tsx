@@ -23,6 +23,9 @@ export { MeshBackground } from './components/MeshBackground';
 export { HubNotification } from './components/HubNotification';
 export { SyncWarning } from './components/SyncWarning';
 export { guardTheme } from './theme';
+// Les capacités accordées par le Hub — ce que ce client a le droit
+// d'utiliser. Rien n'est actif par défaut (cf. capacites.ts).
+export { capacites, aCapacite, oublierCapacites, type Capacite } from './capacites';
 export type { LicenseState, Notification } from './types';
 
 // Auto-updater hook — host apps wire it once at App.tsx mount.
