@@ -113,7 +113,14 @@ export function AboutPanel({
 
     useEffect(() => {
         void load();
-        void checkNow().then(() => setChecked(true));
+        // La recherche de mise a jour part APRÈS l'affichage : c'est un appel
+        // RÉSEAU, et il n'a aucune raison de retarder des informations déjà
+        // disponibles en local. Hors ligne, la carte Version dira simplement
+        // qu'elle n'a pas pu vérifier, au lieu de tourner indéfiniment.
+        const t = setTimeout(() => {
+            void checkNow().then(() => setChecked(true)).catch(() => setChecked(true));
+        }, 300);
+        return () => clearTimeout(t);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -150,7 +157,17 @@ export function AboutPanel({
         }
     };
 
-    if (!data) return null;
+    /**
+     * Squelette pendant le chargement — et NON `return null`.
+     *
+     * Six appels au système partent en parallèle au montage (version,
+     * identifiant machine, clé de licence, trois valeurs de stockage sûr),
+     * plus deux modules chargés à la demande. Tant que le plus lent n'a pas
+     * répondu, la page rendait le VIDE : l'en-tête « À propos » s'affichait,
+     * puis un trou. L'utilisateur croit que la page est cassée, et il a
+     * raison de le croire — rien ne lui dit le contraire.
+     */
+    if (!data) return <AboutSkeleton className={className} />;
 
     const daysLeft = data.expiryMs != null ? Math.ceil((data.expiryMs - Date.now()) / DAY) : null;
     const subscription = data.expiryMs == null
@@ -340,6 +357,34 @@ export function AboutPanel({
                     </span>
                 </div>
             </div>
+        </div>
+    );
+}
+
+/**
+ * Le squelette de la page « À propos » — la MÊME ossature que la page
+ * réelle, en gris : trois blocs, puis la grille de cartes. Un squelette qui
+ * ne ressemble pas à ce qui va s'afficher produit un saut désagréable au
+ * moment du remplacement ; celui-ci occupe exactement la place.
+ */
+function AboutSkeleton({ className = '' }: { className?: string }) {
+    const bloc = (hauteur: number, radius = 20): React.CSSProperties => ({
+        height: hauteur,
+        borderRadius: radius,
+        background: 'var(--lg-color-border, rgba(0,0,0,0.06))',
+        animation: 'lg-pulse 1.4s ease-in-out infinite',
+    });
+    return (
+        <div className={className} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}
+            aria-busy="true" aria-label="Chargement des informations">
+            <style>{'@keyframes lg-pulse{0%,100%{opacity:.55}50%{opacity:.9}}'}</style>
+            <div style={bloc(150, 24)} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 14 }}>
+                <div style={bloc(120)} />
+                <div style={bloc(120)} />
+                <div style={bloc(120)} />
+            </div>
+            <div style={bloc(96)} />
         </div>
     );
 }
