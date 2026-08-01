@@ -194,7 +194,7 @@ export function useLicense() {
                     );
                     // Les plus récentes d'abord (l'ordre du Hub) : on remonte
                     // jusqu'à la première que le commerçant n'a pas encore vue.
-                    const aLire = data.notifications.find((n) => !dismissed.includes(n.id));
+                    const aLire = data.notifications.find((n: Notification) => !dismissed.includes(n.id));
                     setActiveNotif(aLire ?? null);
                 } else {
                     setActiveNotif(null);
