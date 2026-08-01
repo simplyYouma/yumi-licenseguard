@@ -107,6 +107,31 @@ export function useLicense() {
                 // verrou isSyncRequired pour laisser l'écran de la vraie
                 // raison (banni/expiré…) prendre le relais.
                 if (!data.valid) {
+                    // ═══ ON LE DIT AU RUST, PAS SEULEMENT À L'ÉCRAN ═══
+                    //
+                    // Jusqu'ici, un refus du Hub ne bloquait que l'interface.
+                    // Le serveur de boutique, lui, démarre AVANT React et ne
+                    // consulte rien : les postes rattachés continuaient donc
+                    // de vendre sur une licence morte, tant que la machine
+                    // restait allumée.
+                    //
+                    // La garde connaissait le verdict depuis toujours. Elle ne
+                    // l'écrivait nulle part où le Rust puisse le lire.
+                    //
+                    // ⚠️ SEULEMENT SUR UN VERDICT QUI PARLE DE CETTE LICENCE.
+                    //
+                    // `SERVER_ERROR` veut dire que NOTRE Hub est mal
+                    // configuré. Arrêter la boutique d'un client pour une
+                    // panne de notre côté serait lui faire payer notre faute —
+                    // et il n'aurait aucun moyen de comprendre, ni nous de
+                    // nous en apercevoir : sa caisse principale, elle,
+                    // continuerait de tourner sur son délai de grâce.
+                    if (data.reason === "BANNED" || data.reason === "EXPIRED" || data.reason === "NOT_FOUND") {
+                        void invoke('set_secure_storage', {
+                            key: 'licence_etat', value: 'bloquee',
+                        }).catch(() => { /* stockage indisponible : l'écran bloque déjà */ });
+                    }
+
                     if (data.reason === "BANNED") {
                         setState(prev => ({ ...prev, isRevoked: true, isLicensed: false, isSyncRequired: false }));
                     } else if (data.reason === "EXPIRED") {
@@ -136,6 +161,14 @@ export function useLicense() {
                 // --- Cadence pilotée par le Hub (depuis v2.3.0) ---
                 // Si le Hub a tourné un patch et renvoie ces champs, on les
                 // adopte (avec clamp sécurité). Sinon on garde les défauts.
+                // LE HUB A DIT OUI : on efface le verrou posé par un refus
+                // précédent. Sans cet effacement, une licence renouvelée
+                // laisserait le serveur muet jusqu'à la réinstallation — et
+                // personne ne saurait pourquoi.
+                void invoke('set_secure_storage', {
+                    key: 'licence_etat', value: 'ok',
+                }).catch(() => { /* stockage indisponible : rien de bloqué */ });
+
                 if (typeof data.nextVerifyMs === 'number') {
                     nextVerifyMsRef.current = clamp(data.nextVerifyMs, MIN_VERIFY_MS, MAX_VERIFY_MS);
                 }
