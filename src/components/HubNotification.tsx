@@ -27,7 +27,14 @@ export const HubNotification = ({ notification, onDismiss }: Props) => {
             </div>
             <div className="lg-notif-body">
                 <p className="lg-notif-title">{notification.title}</p>
-                <p className="lg-notif-message">{notification.message}</p>
+                {/* `pre-line` : les messages du Hub sont écrits pour être LUS
+                    par un commerçant, et les plus importants — l'arrivée d'une
+                    option qu'il vient de payer — tiennent en deux temps : ce
+                    qu'il peut faire maintenant, puis où le trouver. Sans cela,
+                    les deux se collent en un pavé que personne ne finit. */}
+                <p className="lg-notif-message" style={{ whiteSpace: 'pre-line' }}>
+                    {notification.message}
+                </p>
             </div>
             <button
                 className="lg-notif-close"

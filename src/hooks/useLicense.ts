@@ -175,12 +175,27 @@ export function useLicense() {
                 }
 
                 // --- Notifications Broadcast ---
+                //
+                // ON PREND LA PREMIÈRE NON ENCORE LUE, PAS LA PLUS RÉCENTE.
+                //
+                // L'ancienne version ne regardait que `notifications[0]` : si
+                // elle avait été fermée, plus rien ne s'affichait — et les
+                // messages arrivés juste avant restaient invisibles POUR
+                // TOUJOURS, puisqu'ils ne redeviennent jamais le plus récent.
+                //
+                // Ça n'était pas grave pour des annonces générales ; ça l'est
+                // devenu depuis que le Hub annonce par ce canal l'attribution
+                // d'une option. Accorder deux options à un client dans la même
+                // journée en aurait perdu une : il aurait payé pour quelque
+                // chose dont personne ne lui aurait jamais dit qu'il l'avait.
                 if (data.notifications && data.notifications.length > 0) {
-                    const latest = data.notifications[0];
-                    const dismissed = JSON.parse(localStorage.getItem('yumi_dismissed_notifs') || '[]');
-                    if (!dismissed.includes(latest.id)) {
-                        setActiveNotif(latest);
-                    }
+                    const dismissed: string[] = JSON.parse(
+                        localStorage.getItem('yumi_dismissed_notifs') || '[]'
+                    );
+                    // Les plus récentes d'abord (l'ordre du Hub) : on remonte
+                    // jusqu'à la première que le commerçant n'a pas encore vue.
+                    const aLire = data.notifications.find((n) => !dismissed.includes(n.id));
+                    setActiveNotif(aLire ?? null);
                 } else {
                     setActiveNotif(null);
                 }
