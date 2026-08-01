@@ -46,6 +46,32 @@ export { LicenseSignature } from './components/LicenseSignature';
 
 interface LicenseGuardProps {
     children: React.ReactNode;
+    /**
+     * ═══ CE POSTE EST-IL DÉJÀ RATTACHÉ À UNE CAISSE ? ═══
+     *
+     * Une boutique paie UN abonnement, pas une licence par appareil. La
+     * deuxième caisse, la tablette des rayons, le PC du patron chez lui n'ont
+     * pas de clé : ils travaillent sur la base de la caisse principale, et
+     * c'est leur APPAIRAGE qui les autorise.
+     *
+     * Quand c'est le cas, on ne demande pas de clé. Et surtout : ON NE COUPE
+     * PLUS un poste hors ligne. Aujourd'hui, chaque appareil vérifie SA
+     * licence auprès du Hub ; une tablette privée d'internet quelques jours
+     * finit bloquée — alors qu'elle travaille très bien sur la caisse à trois
+     * mètres, et que la boutique est à jour. C'est un défaut, pas une
+     * protection.
+     *
+     * La vérification réelle du rattachement (« suis-je toujours reconnu ? »,
+     * « ai-je été révoqué ? ») appartient à l'application : elle seule connaît
+     * son serveur. Elle se fait juste après, à l'intérieur.
+     */
+    appaire?: boolean;
+    /**
+     * Le chemin « rejoindre une caisse existante », proposé DISCRÈTEMENT sous
+     * la saisie de clé. Le contenu vient de l'application — c'est elle qui
+     * sait s'appairer. Voir `ActivationScreen`.
+     */
+    rejoindre?: React.ReactNode;
 }
 
 /**
@@ -60,7 +86,7 @@ interface LicenseGuardProps {
  * each license state has its own deliberate color so users recognize
  * what is happening at a glance.
  */
-export const LicenseGuard: React.FC<LicenseGuardProps> = ({ children }) => {
+export const LicenseGuard: React.FC<LicenseGuardProps> = ({ children, appaire = false, rejoindre }) => {
     const license = useLicense();
     const [isBannerDismissed, setIsBannerDismissed] = useState(false);
     const [showManual, setShowManual] = useState(false);
@@ -118,6 +144,13 @@ export const LicenseGuard: React.FC<LicenseGuardProps> = ({ children }) => {
         return () => window.removeEventListener('keydown', onKeyDown);
     }, []);
 
+    // UN POSTE RATTACHÉ PASSE. Il n'a pas de clé et n'en a pas besoin : son
+    // droit vient de la caisse principale, qui, elle, en a une. On saute donc
+    // TOUS les écrans de licence — y compris « synchronisation requise », qui
+    // couperait un poste parfaitement légitime pour une panne de réseau qui ne
+    // le concerne pas.
+    if (appaire) return <>{children}</>;
+
     if (license.isLicensed === null) return <LoadingScreen />;
 
     if (license.isClockFraud) {
@@ -152,6 +185,7 @@ export const LicenseGuard: React.FC<LicenseGuardProps> = ({ children }) => {
                 machineId={license.machineId}
                 isValidating={license.isValidating}
                 onActivate={license.activateLicense}
+                rejoindre={rejoindre}
             />
         );
     }

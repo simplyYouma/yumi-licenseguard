@@ -1,13 +1,34 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Copy, Check, AlertTriangle, ShieldCheck, Loader2 } from 'lucide-react';
 
 interface Props {
     machineId: string;
     onActivate: (key: string) => Promise<{ success: boolean; message?: string }>;
     isValidating: boolean;
+    /**
+     * ═══ REJOINDRE UNE CAISSE EXISTANTE ═══
+     *
+     * Toutes les machines n'ont pas de clé, et c'est voulu : une boutique
+     * paie UN abonnement, pas une licence par appareil. La deuxième caisse,
+     * la tablette des rayons, le PC du patron chez lui — aucun n'a de clé.
+     * Ils rejoignent la caisse principale.
+     *
+     * Ce chemin est proposé ICI parce que c'est le seul écran qu'on voit
+     * après avoir installé l'application. Sans lui, un appareil sans clé
+     * serait bloqué à la porte, et tout le modèle tomberait.
+     *
+     * Mais il reste DISCRET : neuf installations sur dix sont une caisse
+     * principale, qui a bien une clé. On ne met pas les deux chemins sur le
+     * même plan — on garde l'écran tel quel et on ajoute une sortie en bas.
+     *
+     * Le contenu vient de l'application, pas d'ici : c'est elle qui sait
+     * s'appairer (adresse, code à six chiffres, scanner si l'appareil a une
+     * caméra). LicenseGuard ne connaît que les licences.
+     */
+    rejoindre?: ReactNode;
 }
 
-export const ActivationScreen = ({ machineId, onActivate, isValidating }: Props) => {
+export const ActivationScreen = ({ machineId, onActivate, isValidating, rejoindre }: Props) => {
     const [key, setKey] = useState('');
     const [error, setError] = useState('');
     const [copied, setCopied] = useState(false);
@@ -77,6 +98,8 @@ export const ActivationScreen = ({ machineId, onActivate, isValidating }: Props)
                             <span>{error}</span>
                         </div>
                     )}
+
+                    {rejoindre}
 
                     <p className="lg-footer">
                         Sécurisé par <span className="lg-footer-brand">Yumi LicenseGuard</span>
