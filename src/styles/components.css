@@ -285,6 +285,49 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
+ * NOTICE — le message de l'éditeur à une installation sans licence
+ *
+ * Le ton visuel compte autant que le texte. Neuf fois sur dix, cette machine
+ * appartient à quelqu'un de parfaitement honnête : une réinstallation après
+ * panne, une tablette d'occasion. Un bandeau rouge accuserait avant qu'on ait
+ * lu la première phrase — on reprend donc la couleur d'ACTIVATION, celle de
+ * l'accueil, pas celle de l'interdit.
+ *
+ * Le blocage, lui, emprunte `.lg-alert` (rouge) : là, c'est mérité.
+ * ───────────────────────────────────────────────────────────── */
+.lg-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--lg-space-2);
+  padding: var(--lg-space-3);
+  border-radius: var(--lg-radius-sm);
+  font-size: 12.5px;
+  line-height: 1.55;
+  margin-bottom: var(--lg-space-4);
+  background: var(--lg-activate-soft);
+  color: var(--lg-activate-strong);
+  border: 1px solid var(--lg-activate);
+  /* Le texte est composé en paragraphes ; les aplatir en ferait un pavé. */
+  white-space: pre-line;
+  text-align: left;
+}
+.lg-notice svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* Un message de blocage est plus long qu'une erreur de saisie : on garde le
+   rouge de `.lg-alert` mais on lui rend ses paragraphes et son alignement. */
+.lg-avis {
+  white-space: pre-line;
+  text-align: left;
+  margin-top: 0;
+  margin-bottom: var(--lg-space-4);
+}
+
+/* ─────────────────────────────────────────────────────────────
  * CONNECTIVITY — live network status pill (SyncRequiredScreen)
  * ───────────────────────────────────────────────────────────── */
 .lg-connectivity {

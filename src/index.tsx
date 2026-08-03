@@ -27,6 +27,11 @@ export { guardTheme } from './theme';
 // d'utiliser. Rien n'est actif par défaut (cf. capacites.ts).
 export { capacites, aCapacite, oublierCapacites, type Capacite } from './capacites';
 export type { LicenseState, Notification } from './types';
+// Le signalement des installations sans licence — exporté pour que les tests
+// et les applications hôtes puissent en lire les garde-fous, jamais pour
+// l'appeler à la main : c'est `useLicense` qui décide quand parler.
+export { estRattache, doitSignaler, lireAvis } from './signalement';
+export type { AvisInstallation } from './signalement';
 
 // Auto-updater hook — host apps wire it once at App.tsx mount.
 export { useUpdater } from './hooks/useUpdater';
@@ -87,7 +92,11 @@ interface LicenseGuardProps {
  * what is happening at a glance.
  */
 export const LicenseGuard: React.FC<LicenseGuardProps> = ({ children, appaire = false, rejoindre }) => {
-    const license = useLicense();
+    // `appaire` descend jusqu'au hook POUR UNE SEULE RAISON : ne pas signaler
+    // au Hub une machine qui travaille sur la caisse d'une boutique. Le cycle
+    // de licence, lui, ne change pas — c'est le `return` plus bas qui saute
+    // les écrans, comme avant.
+    const license = useLicense({ appaire });
     const [isBannerDismissed, setIsBannerDismissed] = useState(false);
     const [showManual, setShowManual] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -186,6 +195,7 @@ export const LicenseGuard: React.FC<LicenseGuardProps> = ({ children, appaire = 
                 isValidating={license.isValidating}
                 onActivate={license.activateLicense}
                 rejoindre={rejoindre}
+                avis={license.avisInstallation}
             />
         );
     }

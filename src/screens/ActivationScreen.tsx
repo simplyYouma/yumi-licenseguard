@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { Copy, Check, AlertTriangle, ShieldCheck, Loader2 } from 'lucide-react';
+import { Copy, Check, AlertTriangle, ShieldCheck, Loader2, Info } from 'lucide-react';
+import type { AvisInstallation } from '../signalement';
 
 interface Props {
     machineId: string;
@@ -26,9 +27,21 @@ interface Props {
      * caméra). LicenseGuard ne connaît que les licences.
      */
     rejoindre?: ReactNode;
+    /**
+     * ═══ CE QUE L'ÉDITEUR A ÉCRIT À CETTE MACHINE ═══
+     *
+     * Une installation sans licence se signale au Hub (voir `signalement.ts`).
+     * Si Youma a répondu quelque chose, c'est ici que ça s'affiche — au-dessus
+     * du champ de clé quand c'est un simple message, à la PLACE du champ quand
+     * l'installation est bloquée.
+     *
+     * `null` dans l'écrasante majorité des cas, et l'écran est alors
+     * rigoureusement identique à ce qu'il a toujours été.
+     */
+    avis?: AvisInstallation | null;
 }
 
-export const ActivationScreen = ({ machineId, onActivate, isValidating, rejoindre }: Props) => {
+export const ActivationScreen = ({ machineId, onActivate, isValidating, rejoindre, avis }: Props) => {
     const [key, setKey] = useState('');
     const [error, setError] = useState('');
     const [copied, setCopied] = useState(false);
@@ -47,6 +60,10 @@ export const ActivationScreen = ({ machineId, onActivate, isValidating, rejoindr
         if (!result.success) setError(result.message || 'Erreur de validation.');
     };
 
+    // Une installation bloquée ne saisit plus de clé : le champ n'aurait servi
+    // qu'à faire essayer des clés au hasard. La mise en garde prend sa place.
+    const bloquee = avis?.bloquee === true;
+
     return (
         <div className="lg-page lg-state-activate">
             <div className="lg-card">
@@ -57,11 +74,23 @@ export const ActivationScreen = ({ machineId, onActivate, isValidating, rejoindr
                 </div>
 
                 <div className="lg-body">
-                    <p className="lg-eyebrow">Activation requise</p>
-                    <h1 className="lg-title">Activer cette instance</h1>
+                    <p className="lg-eyebrow">{bloquee ? 'Licence requise' : 'Activation requise'}</p>
+                    <h1 className="lg-title">{bloquee ? 'Installation non autorisée' : 'Activer cette instance'}</h1>
                     <p className="lg-description">
-                        Cette installation n'est pas encore associée à une licence valide. Saisissez la clé fournie par votre administrateur.
+                        {bloquee
+                            ? "Cette installation n'est rattachée à aucune licence. Prenez contact avec l'éditeur pour la régulariser."
+                            : "Cette installation n'est pas encore associée à une licence valide. Saisissez la clé fournie par votre administrateur."}
                     </p>
+
+                    {/* LE MESSAGE DE L'ÉDITEUR, tel qu'il l'a écrit. Les retours
+                        à la ligne sont conservés : le texte est composé en
+                        paragraphes, et les aplatir en ferait un pavé. */}
+                    {avis?.message && (
+                        <div className={bloquee ? 'lg-alert lg-avis' : 'lg-notice'}>
+                            {bloquee ? <AlertTriangle /> : <Info />}
+                            <span>{avis.message}</span>
+                        </div>
+                    )}
 
                     <div className="lg-field">
                         <label className="lg-field-label">Identifiant machine</label>
@@ -73,24 +102,28 @@ export const ActivationScreen = ({ machineId, onActivate, isValidating, rejoindr
                         </button>
                     </div>
 
-                    <div className="lg-field">
-                        <label className="lg-field-label">Clé d'activation</label>
-                        <input
-                            className="lg-input"
-                            type="text"
-                            value={key}
-                            onChange={(e) => { setKey(e.target.value); if (error) setError(''); }}
-                            onKeyDown={(e) => { if (e.key === 'Enter' && key.trim() && !isValidating) handleSubmit(); }}
-                            placeholder="Collez la clé fournie"
-                            disabled={isValidating}
-                        />
-                    </div>
+                    {!bloquee && (
+                        <>
+                            <div className="lg-field">
+                                <label className="lg-field-label">Clé d'activation</label>
+                                <input
+                                    className="lg-input"
+                                    type="text"
+                                    value={key}
+                                    onChange={(e) => { setKey(e.target.value); if (error) setError(''); }}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' && key.trim() && !isValidating) handleSubmit(); }}
+                                    placeholder="Collez la clé fournie"
+                                    disabled={isValidating}
+                                />
+                            </div>
 
-                    <button className="lg-button" type="button" onClick={handleSubmit} disabled={!key.trim() || isValidating}>
-                        {isValidating
-                            ? <><Loader2 className="lg-button-spin" /><span>Vérification…</span></>
-                            : <><ShieldCheck /><span>Activer</span></>}
-                    </button>
+                            <button className="lg-button" type="button" onClick={handleSubmit} disabled={!key.trim() || isValidating}>
+                                {isValidating
+                                    ? <><Loader2 className="lg-button-spin" /><span>Vérification…</span></>
+                                    : <><ShieldCheck /><span>Activer</span></>}
+                            </button>
+                        </>
+                    )}
 
                     {error && (
                         <div className="lg-alert">
@@ -99,6 +132,12 @@ export const ActivationScreen = ({ machineId, onActivate, isValidating, rejoindr
                         </div>
                     )}
 
+                    {/* ═══ « REJOINDRE UNE CAISSE » RESTE OUVERT, MÊME BLOQUÉ ═══
+                        C'est la sortie de secours d'un poste légitime que le
+                        Hub n'aurait pas su reconnaître. Elle ne coûte rien :
+                        s'appairer exige une caisse qui porte, elle, une vraie
+                        licence. La refermer, en revanche, laisserait un
+                        commerçant en règle devant une porte close. */}
                     {rejoindre}
 
                     <p className="lg-footer">

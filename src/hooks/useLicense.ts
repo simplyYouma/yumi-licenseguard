@@ -3,12 +3,21 @@ import { invoke } from '@tauri-apps/api/core';
 import type { LicenseState, Notification } from '../types';
 import { guardTheme } from '../theme';
 import { oublierCapacites } from '../capacites';
+import { signalerInstallation } from '../signalement';
 
 // ============================================================
 // CONFIGURATION HUB
 // ============================================================
 const YUMI_HUB_API = import.meta.env.VITE_YUMI_HUB_URL || "http://localhost:4000/api/verify";
 const YUMI_PROJECT_ID = (import.meta.env.VITE_YUMI_PROJECT_ID || "").replace(/"/g, "");
+
+/**
+ * L'adresse du signalement d'installation, dérivée de celle de la
+ * vérification. Une seule variable d'environnement à tenir dans les cinq POS,
+ * et impossible de configurer l'une sans l'autre — deux réglages auraient fini
+ * par diverger dans un `.env` oublié.
+ */
+const YUMI_HUB_SIGNAL = YUMI_HUB_API.replace(/\/api\/verify\/?$/, "") + "/api/installations/signal";
 
 // Bornes de sécurité pour les valeurs serveur — un Hub mal configuré ne doit
 // jamais pouvoir geler tous les POS (5 min minimum) ni les laisser dériver
@@ -40,7 +49,18 @@ async function getAppVersion(): Promise<string | null> {
     return cachedAppVersion;
 }
 
-export function useLicense() {
+export interface OptionsLicence {
+    /**
+     * Ce poste travaille-t-il sur la caisse d'une boutique ?
+     *
+     * Sert UNIQUEMENT à ne pas signaler une machine légitime au Hub. Le reste
+     * du cycle de vie de la licence ne change pas d'un iota — c'est
+     * `<LicenseGuard appaire>` qui décide déjà de sauter les écrans.
+     */
+    appaire?: boolean;
+}
+
+export function useLicense({ appaire = false }: OptionsLicence = {}) {
     const [state, setState] = useState<LicenseState>({
         isLicensed: null,
         isRevoked: false,
@@ -51,7 +71,14 @@ export function useLicense() {
         isSyncRequired: false,
         lastSyncDate: null,
         expiresAt: null,
+        avisInstallation: null,
     });
+
+    // En ref, pas en dépendance d'effet : l'application peut calculer son
+    // appairage après le premier rendu, et relancer tout le cycle de licence
+    // pour ça serait un remède pire que le mal.
+    const appaireRef = useRef(appaire);
+    appaireRef.current = appaire;
 
     const [activeNotif, setActiveNotif] = useState<Notification | null>(null);
     const [isValidating, setIsValidating] = useState(false);
@@ -308,6 +335,12 @@ export function useLicense() {
     // --- LifeCycle ---
 
     useEffect(() => {
+        // Le composant est-il toujours monté ? Le signalement d'installation
+        // répond APRÈS que l'écran d'activation soit affiché — c'est tout son
+        // intérêt —, il faut donc savoir si son résultat a encore un écran où
+        // aller.
+        let vivant = true;
+
         const init = async () => {
             // -- 1. Web Preview Check --
             if (!('__TAURI_INTERNALS__' in window)) {
@@ -325,7 +358,34 @@ export function useLicense() {
                 // 2. Existing License
                 const savedLicense = await invoke<string>('get_license_key');
                 if (!savedLicense) {
+                    // L'ÉCRAN D'ABORD. Il s'affiche exactement comme avant, et
+                    // c'est un invariant : le signalement qui suit ne doit rien
+                    // retarder ni rien pouvoir casser.
                     setState(prev => ({ ...prev, isLicensed: false }));
+
+                    // ═══ SIGNALER CETTE INSTALLATION AU HUB ═══
+                    //
+                    // Une machine sans clé n'appelait personne : elle était
+                    // parfaitement invisible. Elle se signale désormais — une
+                    // fois par 24 h au plus, et JAMAIS si elle est rattachée à
+                    // la caisse d'une boutique (voir `signalement.ts`, qui
+                    // porte la garde et refuse de parler en cas de doute).
+                    //
+                    // ⚠️ SANS `await`, ET SANS `throw` POSSIBLE. Hors ligne ou
+                    // Hub muet, la fonction rend `null` et il ne se passe
+                    // strictement rien de plus qu'avant.
+                    void (async () => {
+                        const avis = await signalerInstallation({
+                            hwid,
+                            projectId: YUMI_PROJECT_ID,
+                            urlSignal: YUMI_HUB_SIGNAL,
+                            appVersion: await getAppVersion(),
+                            appaire: appaireRef.current,
+                        });
+                        if (vivant && avis) {
+                            setState(prev => ({ ...prev, avisInstallation: avis }));
+                        }
+                    })();
                     return;
                 }
 
@@ -435,7 +495,10 @@ export function useLicense() {
         };
 
         const cleanupPromise = init();
-        return () => { cleanupPromise.then(cb => cb && cb()); };
+        return () => {
+            vivant = false;
+            cleanupPromise.then(cb => cb && cb());
+        };
     }, [verifyWithHub]);
 
     return {

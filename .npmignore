@@ -4,6 +4,11 @@
 
 tauri/
 target/
+# Les tests de la garde ne partent PAS chez les cinq POS : ils importent
+# `vitest`, que les applications hôtes n'installent pas, et un fichier qui ne
+# résout pas ses imports dans leur node_modules est une panne qui attend.
+*.test.ts
+vitest.config.ts
 **/target/
 INTEGRATION.md
 .github/

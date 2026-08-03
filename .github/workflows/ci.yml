@@ -29,6 +29,12 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
+      # Les décisions de la garde — et surtout celle de NE PAS signaler au Hub
+      # un poste rattaché à une caisse. C'est la seule règle de ce dépôt dont
+      # l'erreur se voit chez un client, sous la forme d'une caisse fermée.
+      - name: Tests
+        run: npm test
+
   # ────────────────────────────────────────────────────────────────────────
   # Rust: cargo check on the shared yumi-licenseguard crate.
   # Standalone build — proves the crate compiles outside any host app.
