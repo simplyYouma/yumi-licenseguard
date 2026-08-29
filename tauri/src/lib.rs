@@ -35,9 +35,12 @@ pub mod commands {
     //
     // Stratégie par plateforme :
     //
-    //   • Windows  → UUID matériel via WMIC csproduct / registre Cryptography
-    //                (stable cross-reboot, change si la carte mère change —
-    //                comportement attendu pour une licence par machine)
+    //   • Windows  → UUID matériel SMBIOS via CIM (Win32_ComputerSystemProduct),
+    //                mémorisé dans app_data_dir et revalidé à chaque lancement.
+    //                Stable cross-reboot ; ne change QUE si la carte mère
+    //                change — comportement attendu pour une licence par
+    //                machine. Voir `candidats_machine` : l'identité ne doit
+    //                jamais dépendre de l'outil système encore installé.
     //   • macOS    → IOPlatformUUID via ioreg (équivalent matériel)
     //   • Linux    → /etc/machine-id (systemd, stable cross-reboot)
     //   • Android  → UUID v4 persistant dans app_data_dir. Stable
@@ -56,37 +59,76 @@ pub mod commands {
     // `invoke('get_machine_id')` reste inchangé — Tauri injecte
     // automatiquement l'AppHandle.
 
+    /// Un identifiant n'est retenu que s'il ressemble vraiment à un UUID
+    /// matériel. Le « zéro absolu » est renvoyé par certaines cartes mères
+    /// OEM : il désignerait alors TOUTES ces machines à la fois.
     #[cfg(target_os = "windows")]
-    fn read_machine_id(_app: &AppHandle) -> String {
-        use std::process::Command;
+    fn identifiant_plausible(brut: &str) -> Option<String> {
+        let v = brut.trim().to_uppercase();
+        if v.len() < 8 || !v.contains('-') {
+            return None;
+        }
+        if v.chars().all(|c| c == '0' || c == '-') {
+            return None;
+        }
+        Some(v)
+    }
 
-        // 1. WMIC csproduct UUID — most stable across reboots and clones.
+    /// TOUS les identifiants lisibles sur cette machine, du plus fiable au
+    /// moins fiable. La liste sert deux fois : le premier élément devient
+    /// l'identité, et l'ensemble sert à VALIDER une identité mémorisée.
+    #[cfg(target_os = "windows")]
+    fn candidats_machine() -> Vec<String> {
+        use std::process::Command;
+        let mut trouves: Vec<String> = Vec::new();
+
+        // 1. L'UUID de la carte mère (SMBIOS), via CIM.
+        //
+        // ═══ POURQUOI PLUS PAR `wmic` ═══
+        //
+        // C'est ici que tout s'est joué. `wmic csproduct get uuid` a rendu
+        // cet UUID pendant des années — puis Microsoft a RETIRÉ wmic de
+        // Windows 11. Du jour au lendemain, sur une machine parfaitement
+        // inchangée, la commande n'existe plus : le code tombait sur la
+        // source suivante et rendait un identifiant TOTALEMENT DIFFÉRENT.
+        // La licence activée ne correspondait alors plus à rien et le POS
+        // réclamait une nouvelle activation (constaté par Youma le
+        // 29/08/2026 : sa machine annonçait 21C090F9… là où le Hub
+        // connaissait 4391823F…).
+        //
+        // `Get-CimInstance Win32_ComputerSystemProduct` interroge la MÊME
+        // donnée SMBIOS et rend EXACTEMENT le même UUID : les machines déjà
+        // activées retrouvent donc leur identité, sans rien réactiver.
+        if let Ok(output) = Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "(Get-CimInstance -ClassName Win32_ComputerSystemProduct).UUID",
+            ])
+            .output()
+        {
+            if let Some(v) = identifiant_plausible(&String::from_utf8_lossy(&output.stdout)) {
+                trouves.push(v);
+            }
+        }
+
+        // 2. wmic, pour les Windows anciens où PowerShell est bridé. Rend la
+        //    même valeur que la source 1 quand il existe encore.
         if let Ok(output) = Command::new("wmic")
             .args(["csproduct", "get", "uuid"])
             .output()
         {
-            let raw = String::from_utf8_lossy(&output.stdout);
-            let cleaned = raw.replace("UUID", "").trim().to_string();
-            if !cleaned.is_empty() && cleaned != "00000000-0000-0000-0000-000000000000" {
-                return cleaned;
+            let raw = String::from_utf8_lossy(&output.stdout).replace("UUID", "");
+            if let Some(v) = identifiant_plausible(&raw) {
+                if !trouves.contains(&v) {
+                    trouves.push(v);
+                }
             }
         }
 
-        // 2. PowerShell HKLM Cryptography MachineGuid.
-        if let Ok(output) = Command::new("powershell")
-            .args([
-                "-Command",
-                "(Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Cryptography').MachineGuid",
-            ])
-            .output()
-        {
-            let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !result.is_empty() {
-                return result;
-            }
-        }
-
-        // 3. Reg query fallback (PowerShell unavailable / restricted).
+        // 3. MachineGuid — identité de l'INSTALLATION de Windows, pas du
+        //    matériel : elle est régénérée par une réinstallation du système.
+        //    Dernier recours, jamais un premier choix.
         if let Ok(output) = Command::new("reg")
             .args([
                 "query",
@@ -97,14 +139,70 @@ pub mod commands {
             .output()
         {
             let result = String::from_utf8_lossy(&output.stdout);
-            if let Some(guid) = result.split_whitespace().last() {
-                if guid.contains('-') {
-                    return guid.to_string();
+            if let Some(dernier) = result.split_whitespace().last() {
+                if let Some(v) = identifiant_plausible(dernier) {
+                    if !trouves.contains(&v) {
+                        trouves.push(v);
+                    }
                 }
             }
         }
 
-        "ID-MOTEUR-YUMI-NON-IDENTIFIE".to_string()
+        trouves
+    }
+
+    /// ═══ L'IDENTITÉ NE DÉPEND PLUS DE L'OUTIL DISPONIBLE ═══
+    ///
+    /// Le défaut de fond n'était pas le retrait de `wmic` : c'était qu'une
+    /// cascade de sources DIFFÉRENTES pouvait, en silence, changer l'identité
+    /// d'une machine. Le premier identifiant retenu est donc conservé dans
+    /// `app_data_dir`, et réutilisé tant qu'il correspond ENCORE à l'une des
+    /// sources lisibles.
+    ///
+    /// Cette double condition est le cœur du raisonnement :
+    ///
+    ///   · une source qui disparaît ne change plus rien — la mémoire tient,
+    ///     et une source restante confirme qu'on est bien sur la même
+    ///     machine ;
+    ///   · un dossier de données recopié sur un AUTRE ordinateur ne
+    ///     correspond à aucune source locale : la mémoire est rejetée et la
+    ///     licence ne suit pas. Sans cette validation, copier le dossier
+    ///     emporterait la licence ET son identifiant — la protection ne
+    ///     servirait plus à rien, puisque `.license` vit au même endroit.
+    #[cfg(target_os = "windows")]
+    fn read_machine_id(app: &AppHandle) -> String {
+        let candidats = candidats_machine();
+        let chemin = app.path().app_data_dir().ok().map(|dir| {
+            if !dir.exists() {
+                let _ = fs::create_dir_all(&dir);
+            }
+            dir.join(".machine_id")
+        });
+        let memorise = chemin.as_ref().and_then(|p| {
+            fs::read_to_string(p)
+                .ok()
+                .map(|c| c.trim().to_uppercase())
+                .filter(|c| !c.is_empty())
+        });
+
+        // Une identité déjà connue, encore confirmée par le matériel, prime.
+        if let Some(garde) = memorise.as_ref() {
+            if candidats.iter().any(|c| c == garde) {
+                return garde.clone();
+            }
+        }
+
+        let Some(principal) = candidats.first().cloned() else {
+            // Aucune source lisible (PowerShell bridé, session verrouillée) :
+            // on préfère l'identité mémorisée à un libellé d'erreur, qui
+            // ferait réclamer une activation à tort.
+            return memorise.unwrap_or_else(|| "ID-MOTEUR-YUMI-NON-IDENTIFIE".to_string());
+        };
+
+        if let Some(path) = chemin.as_ref() {
+            let _ = fs::write(path, &principal);
+        }
+        principal
     }
 
     #[cfg(target_os = "macos")]
