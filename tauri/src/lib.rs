@@ -59,6 +59,22 @@ pub mod commands {
     // `invoke('get_machine_id')` reste inchangé — Tauri injecte
     // automatiquement l'AppHandle.
 
+    /// ═══ AUCUNE CONSOLE NOIRE NE DOIT CLIGNOTER À L'ÉCRAN ═══
+    ///
+    /// Sur Windows, lancer `powershell`, `wmic` ou `reg` depuis une
+    /// application graphique ouvre une VRAIE fenêtre de console — elle
+    /// apparaît, clignote et se referme. Personne ne sait d'où elle vient, et
+    /// dans un magasin, devant un client, ça a l'air d'un incident (constaté
+    /// par Youma le 31/08/2026 : « des fenêtres qui se lancent et se ferment,
+    /// je ne connais pas la cause »).
+    ///
+    /// `CREATE_NO_WINDOW` demande au système de créer le processus SANS
+    /// console. C'est la règle déjà appliquée dans les POS (voir
+    /// `pare_feu.rs`) ; elle manquait ici, où l'identifiant machine se lit
+    /// justement par ces commandes.
+    #[cfg(target_os = "windows")]
+    const SANS_FENETRE: u32 = 0x0800_0000;
+
     /// Un identifiant n'est retenu que s'il ressemble vraiment à un UUID
     /// matériel. Le « zéro absolu » est renvoyé par certaines cartes mères
     /// OEM : il désignerait alors TOUTES ces machines à la fois.
@@ -79,6 +95,7 @@ pub mod commands {
     /// l'identité, et l'ensemble sert à VALIDER une identité mémorisée.
     #[cfg(target_os = "windows")]
     fn candidats_machine() -> Vec<String> {
+        use std::os::windows::process::CommandExt;
         use std::process::Command;
         let mut trouves: Vec<String> = Vec::new();
 
@@ -105,6 +122,7 @@ pub mod commands {
                 "-Command",
                 "(Get-CimInstance -ClassName Win32_ComputerSystemProduct).UUID",
             ])
+            .creation_flags(SANS_FENETRE)
             .output()
         {
             if let Some(v) = identifiant_plausible(&String::from_utf8_lossy(&output.stdout)) {
@@ -116,6 +134,7 @@ pub mod commands {
         //    même valeur que la source 1 quand il existe encore.
         if let Ok(output) = Command::new("wmic")
             .args(["csproduct", "get", "uuid"])
+            .creation_flags(SANS_FENETRE)
             .output()
         {
             let raw = String::from_utf8_lossy(&output.stdout).replace("UUID", "");
@@ -136,6 +155,7 @@ pub mod commands {
                 "/v",
                 "MachineGuid",
             ])
+            .creation_flags(SANS_FENETRE)
             .output()
         {
             let result = String::from_utf8_lossy(&output.stdout);
@@ -285,9 +305,20 @@ pub mod commands {
         "UNSUPPORTED_PLATFORM".to_string()
     }
 
+    /// L'identité est résolue UNE FOIS par lancement.
+    ///
+    /// Elle ne peut pas changer pendant que l'application tourne, et chaque
+    /// résolution coûte le démarrage d'un ou deux processus système. Sans ce
+    /// garde-mémoire, un écran qui redemande l'identifiant relançait
+    /// PowerShell — et, avant `CREATE_NO_WINDOW`, faisait clignoter une
+    /// console de plus.
+    static ID_MACHINE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
     #[tauri::command]
     pub fn get_machine_id(app: AppHandle) -> String {
-        read_machine_id(&app).to_uppercase()
+        ID_MACHINE
+            .get_or_init(|| read_machine_id(&app).to_uppercase())
+            .clone()
     }
 
     // ── Ed25519 verification ───────────────────────────────────────────────
