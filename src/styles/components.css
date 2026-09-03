@@ -51,6 +51,19 @@
 /* ─────────────────────────────────────────────────────────────
  * PAGE — full-viewport container, centered card
  * ───────────────────────────────────────────────────────────── */
+/* ⚠️ CET ÉCRAN EST CELUI DES SIX APPLICATIONS — il n'a pas le droit de rogner.
+ *
+ * Il était `place-items: center` sans défilement : dès que la carte dépassait
+ * la hauteur de la fenêtre — ce qui arrive vite sur l'écran d'activation, le
+ * plus haut de la famille (avis éditeur, identifiant machine, champ de clé,
+ * bouton, alerte, bloc « rejoindre », pied de page) — le débordement partait
+ * au-dessus ET au-dessous du centre, et rien ne défilait. Le bouton
+ * « Activer » devenait littéralement inatteignable sur un portable bas ou une
+ * tablette en paysage.
+ *
+ * `overflow-y: auto` rend la page défilable, et `safe center` garde le
+ * centrage tant que ça tient : au-delà, le contenu repart du haut au lieu de
+ * déborder des deux côtés. Les deux ensemble, jamais l'un sans l'autre. */
 .lg-page {
   position: fixed;
   inset: 0;
@@ -58,8 +71,11 @@
   background: var(--lg-bg);
   color: var(--lg-text);
   font-family: var(--lg-font-sans);
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
+  align-items: safe center;
+  overflow-y: auto;
   padding: var(--lg-space-4);
   -webkit-font-smoothing: antialiased;
   line-height: 1.5;
@@ -68,8 +84,12 @@
 /* ─────────────────────────────────────────────────────────────
  * CARD — main container
  * ───────────────────────────────────────────────────────────── */
+/* `flex-shrink: 0` : dans un parent flex qui défile, une carte compressible se
+ * ferait écraser au lieu de provoquer le défilement — et son contenu serait de
+ * nouveau rogné, par un autre chemin. */
 .lg-card {
   width: 100%;
+  flex-shrink: 0;
   max-width: var(--lg-card-max-width);
   background: var(--lg-surface);
   border: 1px solid var(--lg-border);
@@ -81,9 +101,13 @@
 /* ─────────────────────────────────────────────────────────────
  * HERO — colored top section with grid + Yumi shield icon
  * ───────────────────────────────────────────────────────────── */
+/* La bandeau haut consommait 200 px FIXES avant le premier mot. Sur un écran
+ * de 600 px de haut, c'est un tiers de la fenêtre dépensé en décor. Il se
+ * comprime maintenant jusqu'à 120 px et retrouve ses 200 px dès qu'il y a la
+ * place — le contenu utile passe avant l'illustration. */
 .lg-hero {
   position: relative;
-  height: var(--lg-hero-height);
+  height: clamp(120px, 22vh, var(--lg-hero-height));
   display: grid;
   place-items: center;
   background-color: var(--lg-state-soft);
