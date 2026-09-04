@@ -24,8 +24,15 @@ export type Capacite =
     | 'multi_poste'
     /** Consulter et piloter la boutique depuis n'importe où. */
     | 'pilotage_distance'
-    /** Un vrai site de vente en ligne, dont le POS est le back-office. */
-    | 'boutique_en_ligne';
+    /** Un site de vente en ligne AU NOM DU COMMERCE, dont le POS est le back-office. */
+    | 'boutique_en_ligne'
+    /**
+     * Une place sur la PLATEFORME YUMI, la vitrine commune. Vendue à part du
+     * site privé : deux options, deux prix, jamais fusionnées — un commerce
+     * peut avoir l'une, l'autre ou les deux. La caisse publie et relève dès
+     * que l'UNE des deux est là.
+     */
+    | 'plateforme_yumi';
 
 const CLE = 'capabilities';
 
