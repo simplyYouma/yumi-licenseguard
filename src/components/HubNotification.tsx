@@ -1,4 +1,4 @@
-import { AlertTriangle, Megaphone, Bell, CheckCircle2, X } from 'lucide-react';
+import { AlertTriangle, Megaphone, Bell, CheckCircle2, Gift, CalendarClock, MonitorDot, X } from 'lucide-react';
 import type { Notification } from '../types';
 
 interface Props {
@@ -14,11 +14,28 @@ const VARIANT_CLASS: Record<Notification['type'], string> = {
 };
 
 export const HubNotification = ({ notification, onDismiss }: Props) => {
+    /*
+     * ═══ UNE IMAGE PAR SUJET, PAS UNE PAR COULEUR ═══
+     *
+     * Youma : « les notifs pour chaque type doivent avoir des icônes
+     * sémantiques ». La catégorie dit le SUJET — une option qui arrive, une
+     * licence qui approche de son terme, un poste qui ne travaille plus, un
+     * mot de la maison. On la préfère donc toujours au `type`, qui ne dit
+     * qu'une couleur et qui vaut « succès » pour presque tout.
+     *
+     * Le repli par type reste : un Hub plus ancien n'envoie pas de
+     * catégorie, et une notification sans image serait pire qu'une image
+     * générique.
+     */
     const Icon =
-        notification.type === 'error'   ? AlertTriangle :
-        notification.type === 'warning' ? Megaphone     :
-        notification.type === 'success' ? CheckCircle2  :
-                                          Bell;
+        notification.categorie === 'annonce'    ? Gift          :
+        notification.categorie === 'expiration' ? CalendarClock :
+        notification.categorie === 'poste'      ? MonitorDot    :
+        notification.categorie === 'manuelle'   ? Megaphone     :
+        notification.type === 'error'           ? AlertTriangle :
+        notification.type === 'warning'         ? Megaphone     :
+        notification.type === 'success'         ? CheckCircle2  :
+                                                  Bell;
 
     return (
         <div className={`lg-notif ${VARIANT_CLASS[notification.type]}`} role="status">

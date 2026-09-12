@@ -5,6 +5,18 @@ export interface Notification {
     title: string;
     message: string;
     type: 'info' | 'success' | 'warning' | 'error';
+    /**
+     * DE QUOI IL S'AGIT — et c'est ce qui donne son image à la notification.
+     *
+     * `type` ne dit qu'une COULEUR : quatre valeurs, et toutes nos annonces
+     * sont des « succès ». Une option qui arrive, un poste qui dort et un
+     * message de la maison portaient donc la même pastille verte avec la
+     * même coche.
+     *
+     * Facultatif : un Hub d'avant le 12/09/2026 ne l'envoie pas, et la
+     * notification retombe alors sur son type, comme avant.
+     */
+    categorie?: 'annonce' | 'expiration' | 'poste' | 'manuelle' | (string & {});
     created_at: string;
 }
 
