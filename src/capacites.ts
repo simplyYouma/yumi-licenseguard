@@ -32,7 +32,21 @@ export type Capacite =
      * peut avoir l'une, l'autre ou les deux. La caisse publie et relève dès
      * que l'UNE des deux est là.
      */
-    | 'plateforme_yumi';
+    | 'plateforme_yumi'
+    /**
+     * LA FLOTTE DE YUMI PORTE LES LIVRAISONS DE CE COMMERCE.
+     *
+     * Le commerce n'a personne à recruter : il marque la commande prête, ou
+     * confie une vente du comptoir, et le Hub trouve quelqu'un — il propose
+     * la course aux livreurs les plus proches, le premier qui accepte la
+     * prend. La caisse voit le nom et le numéro de celui qui vient ; elle ne
+     * l'assigne pas.
+     *
+     * Vendue à part des deux options « en ligne » : un commerce peut avoir
+     * une vitrine sans notre flotte, et notre flotte sans vitrine — une vente
+     * au comptoir à faire porter n'a besoin d'aucun site.
+     */
+    | 'livraison_yumi';
 
 const CLE = 'capabilities';
 
